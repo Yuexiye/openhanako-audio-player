@@ -116,6 +116,15 @@ if not MODEL_DIR:
 
 # ── 插件数据目录 ──
 USER_HOME = os.environ.get('USERPROFILE', os.environ.get('HOME', ''))
+
+# ── 预检查 whisper 可用性 ──
+_WHISPER_OK = False
+try:
+    import whisper
+    _WHISPER_OK = True
+except ImportError:
+    pass
+
 PLUGIN_DATA = os.environ.get(
     'HANAKO_AUDIO_PLAYER_DIR',
     os.path.join(USER_HOME, '.hanako', 'plugin-data', 'hanako-audio-player')
@@ -153,18 +162,20 @@ def process_task(task_id):
     # ── 自动转录：有参考音频但无参考文本时走 Whisper ──
     if ref_audio and not ref_text and os.path.exists(ref_audio):
         print(f'[转录] 参考音频无文本，自动 Whisper 转录: {ref_audio}', file=sys.stderr)
-        try:
-            import whisper
-            wm = whisper.load_model('base')
-            wr = wm.transcribe(ref_audio, language='zh')
-            ref_text = wr['text'].strip()
-            print(f'[转录] 结果: {ref_text}', file=sys.stderr)
-            # 写回任务文件，后续可直接复用
-            task['refText'] = ref_text
-            with open(task_path, 'w', encoding='utf-8') as f:
-                json.dump(task, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print(f'[转录失败] {e}', file=sys.stderr)
+        if not _WHISPER_OK:
+            print('[转录失败] whisper 未安装。请运行: pip install openai-whisper', file=sys.stderr)
+        else:
+            try:
+                wm = whisper.load_model('base')
+                wr = wm.transcribe(ref_audio, language='zh')
+                ref_text = wr['text'].strip()
+                print(f'[转录] 结果: {ref_text}', file=sys.stderr)
+                # 写回任务文件，后续可直接复用
+                task['refText'] = ref_text
+                with open(task_path, 'w', encoding='utf-8') as f:
+                    json.dump(task, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                print(f'[转录失败] {e}', file=sys.stderr)
     tid = task.get('id', task_id)
 
     if not text:

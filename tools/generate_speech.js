@@ -24,6 +24,7 @@ async function execute(input, toolCtx) {
   try {
     const filePathInput = input.filePath || "";
     if (!filePathInput) throw new Error("请提供 filePath");
+    if (filePathInput.includes('..')) throw new Error("路径不合法");
 
     if (!fs.existsSync(filePathInput)) throw new Error(`文件不存在: ${filePathInput}`);
 

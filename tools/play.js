@@ -66,7 +66,10 @@ async function execute({ source, title }, { sessionPath, pluginId }) {
 
   if (!queue.some(t => t.url === mediaUrl)) {
     queue.push({ name: trackName, url: mediaUrl, mode: isLocal ? '本地' : '在线' });
-    fs.writeFileSync(queuePath, JSON.stringify(queue, null, 2), 'utf-8');
+    // 原子写入：先写临时文件再 rename，防止并发覆盖
+    const tmpPath = queuePath + '.tmp.' + process.pid;
+    fs.writeFileSync(tmpPath, JSON.stringify(queue, null, 2), 'utf-8');
+    fs.renameSync(tmpPath, queuePath);
   }
 
   return {
