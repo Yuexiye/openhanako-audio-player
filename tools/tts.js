@@ -33,12 +33,11 @@ function findVenvPython(cosyVoiceBase) {
   return 'python';
 }
 
-/** 取插件数据目录：环境变量 > USERPROFILE > cwd */
+/** 取插件数据目录（统一版）：环境变量 > 默认 ~/.hanako/plugin-data/hanako-audio-player */
 function getDataDir() {
   if (process.env.HANAKO_AUDIO_PLAYER_DIR) return process.env.HANAKO_AUDIO_PLAYER_DIR;
   const home = process.env.USERPROFILE || process.env.HOME || '';
-  if (home) return path.join(home, '.hanako', 'plugin-data', 'hanako-audio-player');
-  return path.join(process.cwd(), 'hanako-audio-player');
+  return path.join(home, '.hanako', 'plugin-data', 'hanako-audio-player');
 }
 
 /** 查找 executor.py：优先插件源码目录，回退到数据目录 */

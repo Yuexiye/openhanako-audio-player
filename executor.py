@@ -73,23 +73,7 @@ def find_cosyvoice_base():
                     _COSYVOICE_CACHE = d
                     return d
 
-    # 5) 所有可用驱动器根目录（仅 Windows）
-    import string
-    for letter in string.ascii_uppercase:
-        root = f'{letter}:\\'
-        if os.path.isdir(root):
-            for name in ['cosyvoice-tts', 'CosyVoice', 'CosyVoice2']:
-                d = os.path.join(root, name)
-                if _is_cosyvoice_dir(d):
-                    _save_cosyvoice_base(cfg_path, d)
-                    _COSYVOICE_CACHE = d
-                    return d
-            # 也检查 Games/Hanako/Work/ 路径
-            d = os.path.join(root, 'Games', 'Hanako', 'Work', 'cosyvoice-tts')
-            if _is_cosyvoice_dir(d):
-                _save_cosyvoice_base(cfg_path, d)
-                _COSYVOICE_CACHE = d
-                return d
+    # 移除全盘符扫描——依赖 env var / cache / cwd / user home 足够
 
     return ''
 

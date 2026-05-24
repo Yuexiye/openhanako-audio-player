@@ -26,24 +26,15 @@ const parameters = {
 };
 
 /**
- * 获取插件数据目录
- * 优先级: 环境变量 > Hanako 默认路径 > 当前目录
+ * 获取插件数据目录（统一版本）
+ * 优先级: 环境变量 > 默认 ~/.hanako/plugin-data/hanako-audio-player
  */
-function getDataDir(pluginId) {
+function getDataDir() {
   if (process.env.HANAKO_AUDIO_PLAYER_DIR) {
     return process.env.HANAKO_AUDIO_PLAYER_DIR;
   }
-  // Hanako 默认社区插件数据目录
   const home = process.env.USERPROFILE || process.env.HOME || '';
-  const candidates = [
-    path.join(home, '.hanako', 'plugin-data', pluginId),
-    path.join(home, '.hanako', 'plugins', pluginId),
-  ];
-  for (const dir of candidates) {
-    if (fs.existsSync(dir)) return dir;
-  }
-  // 兜底: 当前目录
-  return path.join(process.cwd(), pluginId);
+  return path.join(home, '.hanako', 'plugin-data', 'hanako-audio-player');
 }
 
 async function execute({ source, title }, { sessionPath, pluginId }) {
@@ -51,7 +42,7 @@ async function execute({ source, title }, { sessionPath, pluginId }) {
   const trackName = title || fileName;
   const isLocal = !source.startsWith('http://') && !source.startsWith('https://');
 
-  const dataDir = getDataDir(pluginId);
+  const dataDir = getDataDir();
   const mediaDir = path.join(dataDir, 'media');
   const queuePath = path.join(dataDir, 'queue.json');
 
