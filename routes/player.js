@@ -123,7 +123,9 @@ setTimeout(n,100);
   app.post("/widget/api/queue", async (c) => {
     try {
       const body = await c.req.json();
-      fs.writeFileSync(queuePath, JSON.stringify(body, null, 2), "utf-8");
+      const tmpPath = queuePath + ".tmp." + process.pid;
+      fs.writeFileSync(tmpPath, JSON.stringify(body, null, 2), "utf-8");
+      fs.renameSync(tmpPath, queuePath);
       return c.json({ ok: true });
     } catch (e) {
       return c.json({ ok: false, error: e.message }, 500);
