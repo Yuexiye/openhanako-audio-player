@@ -72,12 +72,92 @@ export default function (app, ctx) {
     return files;
   }
 
-  // ── Widget 页面 ──
+  // ── Widget 页面 + API 统一入口 ──
   app.get("/widget", (c) => {
+    const action = c.req.query("action");
+    // API 路由
+    if (action === "bus_state") return c.json(bus.getState());
+    if (action === "bus_agents") {
+      const agentsDir = path.resolve("W:/Games/Hanako/Work/zhiyi/agents");
+      let agents = [];
+      try {
+        if (fs.existsSync(agentsDir)) {
+          const entries = fs.readdirSync(agentsDir, { withFileTypes: true });
+          agents = entries.filter(e => e.isDirectory()).map(e => ({ id: e.name, name: e.name }));
+        }
+      } catch (e) { console.warn("[bus] agents list failed:", e.message); }
+      return c.json({ ok: true, agents });
+    }
+    if (action === "media_files") {
+      const files = collectMediaFiles().map(({ name, size, mtime, url }) => ({ name, size, mtime, url }));
+      return c.json({ ok: true, files });
+    }
+    // 默认返回 HTML 页面
     const hanaCss = c.req.query("hana-css") || "";
     const token = c.req.query("token") || "";
-    const html = getWidgetHTML(pluginId, hanaCss, token);
-    return c.html(html);
+    return c.html(getWidgetHTML(pluginId, hanaCss, token));
+  });
+
+  app.post("/widget", async (c) => {
+    const action = c.req.query("action");
+    if (action === "bus_control") {
+      try {
+        const body = await c.req.json().catch(() => ({}));
+        const act = body.action || "state";
+        let result;
+        switch (act) {
+          case "load": result = bus.load(body.playlist || []); break;
+          case "say": result = bus.say(body.text || "", { spk: body.spk, instruct: body.instruct, translate: body.translate }); break;
+          case "play": result = bus.play(body.url || "", { name: body.name, mode: body.mode }); break;
+          case "next": result = bus.next(); break;
+          case "pause": result = bus.pause(); break;
+          case "resume": result = bus.resume(); break;
+          case "remove": {
+            const idx = parseInt(body.index, 10);
+            if (!isNaN(idx)) result = bus.remove(idx);
+            else if (body.url) result = bus.removeByUrl(body.url);
+            else result = { ok: false, code: 'missing_index_or_url' };
+            break;
+          }
+          case "clear": result = bus.clear(); break;
+          default: result = bus.getState();
+        }
+        return c.json(result);
+      } catch (e) {
+        return c.json({ ok: false, error: e.message }, 500);
+      }
+    }
+    if (action === "media_delete") {
+      try {
+        const body = await c.req.json().catch(() => ({}));
+        const filename = body.filename || "";
+        if (!filename || filename.includes("/") || filename.includes("\\") || filename.includes("..")) {
+          return c.json({ ok: false, error: "invalid filename" }, 400);
+        }
+        const dirsToScan = [mediaDir];
+        if (pluginDataMediaDir) dirsToScan.push(pluginDataMediaDir);
+        extraMediaDirs.forEach(d => dirsToScan.push(d));
+        let deleted = false;
+        for (const dir of dirsToScan) {
+          const filePath = path.join(dir, filename);
+          if (fs.existsSync(filePath)) { fs.unlinkSync(filePath); deleted = true; break; }
+        }
+        if (!deleted) return c.json({ ok: false, error: "not found" }, 404);
+        try {
+          const bus2 = new AudioBus({ pluginId, dataDir });
+          const targetUrl = `/api/plugins/${pluginId}/widget/media/${encodeURIComponent(filename)}`;
+          bus2.queue = bus2.queue.filter(it => {
+            if (it.type === 'play' && it.url) return stripToken(it.url) !== stripToken(targetUrl);
+            return true;
+          });
+          bus2._saveQueue();
+        } catch (e) { console.warn('[delete] bus cleanup failed:', e.message); }
+        return c.json({ ok: true });
+      } catch (e) {
+        return c.json({ ok: false, error: e.message }, 500);
+      }
+    }
+    return c.json({ ok: false, error: "unknown action" }, 400);
   });
 
   // ── 对话内嵌播放器（音频 base64 内嵌，绕过媒体端点鉴权）──
@@ -193,149 +273,8 @@ setTimeout(n,100);
     return c.html(html);
   });
 
-  // ── 播放队列 ──
-  const queuePath = path.join(dataDir, "queue.json");
-  // 兼容 dev 模式：部分工具可能写到生产数据目录
-  const homeDir = process.env.USERPROFILE || process.env.HOME || "";
-  const prodQueuePath = homeDir ? path.join(homeDir, ".hanako", "plugin-data", "hanako-audio-player", "queue.json") : null;
-
-  // ── Bus 状态 ──
+  // ── Bus 实例（统一在 /widget 路由中处理 API）──
   const bus = new AudioBus({ pluginId, dataDir });
-
-  // ── 助手列表（说话人）──
-  app.get("/bus/agents", (c) => {
-    // Work 目录固定路径
-    const agentsDir = path.resolve("W:/Games/Hanako/Work/zhiyi/agents");
-    let agents = [];
-    try {
-      if (fs.existsSync(agentsDir)) {
-        const entries = fs.readdirSync(agentsDir, { withFileTypes: true });
-        agents = entries.filter(e => e.isDirectory()).map(e => ({ id: e.name, name: e.name }));
-      }
-    } catch (e) { console.warn("[bus] agents list failed:", e.message); }
-    return c.json({ ok: true, agents });
-  });
-
-  app.get("/bus/state", (c) => {
-    return c.json(bus.getState());
-  });
-  app.post("/bus/control", async (c) => {
-    try {
-      const body = await c.req.json().catch(() => ({}));
-      const action = body.action || "state";
-      let result;
-      switch (action) {
-        case "load":
-          result = bus.load(body.playlist || []);
-          break;
-        case "say":
-          result = bus.say(body.text || "", { spk: body.spk, instruct: body.instruct, translate: body.translate });
-          break;
-        case "play":
-          result = bus.play(body.url || "", { name: body.name, mode: body.mode });
-          break;
-        case "next":
-          result = bus.next();
-          break;
-        case "pause":
-          result = bus.pause();
-          break;
-        case "resume":
-          result = bus.resume();
-          break;
-        case "remove": {
-          const idx = parseInt(body.index, 10);
-          if (!isNaN(idx)) result = bus.remove(idx);
-          else if (body.url) result = bus.removeByUrl(body.url);
-          else result = { ok: false, code: 'missing_index_or_url' };
-          break;
-        }
-        case "clear":
-          result = bus.clear();
-          break;
-        default:
-          result = bus.getState();
-      }
-      return c.json(result);
-    } catch (e) {
-      return c.json({ ok: false, error: e.message }, 500);
-    }
-  });
-
-  app.get("/widget/api/queue", (c) => {
-    try {
-      if (fs.existsSync(queuePath)) {
-        return c.json(JSON.parse(fs.readFileSync(queuePath, "utf-8")));
-      }
-      // fallback: 生产目录
-      if (prodQueuePath && fs.existsSync(prodQueuePath)) {
-        return c.json(JSON.parse(fs.readFileSync(prodQueuePath, "utf-8")));
-      }
-    } catch (e) { console.warn('[queue] GET failed:', e.message); }
-    return c.json([]);
-  });
-
-  // ── 媒体库（扫描多个 media/ 目录）──
-  app.get("/widget/api/files", (c) => {
-    try {
-      const files = collectMediaFiles().map(({ name, size, mtime, url }) => ({ name, size, mtime, url }));
-      return c.json({ ok: true, files });
-    } catch (e) {
-      return c.json({ ok: false, error: e.message }, 500);
-    }
-  });
-
-  app.post("/widget/api/delete", async (c) => {
-    try {
-      const body = await c.req.json().catch(() => ({}));
-      const filename = body.filename || "";
-      if (!filename || filename.includes("/") || filename.includes("\\") || filename.includes("..")) {
-        return c.json({ ok: false, error: "invalid filename" }, 400);
-      }
-      // 在所有可能的 media 目录中查找并删除
-      const dirsToScan = [mediaDir];
-      if (pluginDataMediaDir) dirsToScan.push(pluginDataMediaDir);
-      extraMediaDirs.forEach(d => dirsToScan.push(d));
-      let deleted = false;
-      for (const dir of dirsToScan) {
-        const filePath = path.join(dir, filename);
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-          deleted = true;
-          break;
-        }
-      }
-      if (!deleted) return c.json({ ok: false, error: "not found" }, 404);
-      // 同步清理 bus-queue.json 中的引用
-      try {
-        const bus = new AudioBus({ pluginId, dataDir });
-        const targetUrl = `/api/plugins/${pluginId}/widget/media/${encodeURIComponent(filename)}`;
-        bus.queue = bus.queue.filter(it => {
-          if (it.type === 'play' && it.url) return stripToken(it.url) !== stripToken(targetUrl);
-          return true;
-        });
-        bus._saveQueue();
-      } catch (e) { console.warn('[delete] bus cleanup failed:', e.message); }
-      return c.json({ ok: true });
-    } catch (e) {
-      return c.json({ ok: false, error: e.message }, 500);
-    }
-  });
-
-  app.post("/widget/api/queue", async (c) => {
-    try {
-      const body = await c.req.json();
-      // 写入主目录
-      fs.writeFileSync(queuePath, JSON.stringify(body, null, 2), "utf-8");
-      // 也同步到生产目录（如果是 dev 模式）
-      if (prodQueuePath && prodQueuePath !== queuePath) {
-        try { fs.writeFileSync(prodQueuePath, JSON.stringify(body, null, 2), "utf-8"); } catch (e) { console.warn('[queue] prod sync write failed:', e.message); }
-      }
-      return c.json({ ok: true });
-    } catch (e) {
-      return c.json({ ok: false, error: e.message }, 500);
-    }
-  });
 
   // ── 媒体文件 ──
   app.get("/widget/media/:filename", async (c) => {
@@ -803,7 +742,7 @@ function renderPL() {
       var url = trks[i] ? trks[i].url : '';
       if(!url) return;
       // 通知 Bus 播放此 URL
-      fetch(API + '/bus/control', {
+      fetch(API + '/widget?action=bus_control', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'play', url: url, name: trks[i].name })
@@ -820,13 +759,13 @@ function renderPL() {
       var url = track.url;
       var name = track.name;
       // 从 Bus 队列移除
-      fetch(API + '/bus/control', {
+      fetch(API + '/widget?action=bus_control', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'remove', url: url })
       }).catch(function(){});
       // 从 media/ 目录删除文件
-      fetch(API + '/widget/api/delete', {
+      fetch(API + '/widget?action=media_delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filename: name })
@@ -955,7 +894,7 @@ loadPresets();
 
 // 加载助手列表填充说话人下拉框
 function loadAgents() {
-  fetch(API + '/bus/agents').then(function(r){ return r.json(); }).then(function(data) {
+  fetch(API + '/widget?action=bus_agents').then(function(r){ return r.json(); }).then(function(data) {
     if (!data || !data.ok || !Array.isArray(data.agents) || !data.agents.length) return;
     var sel = document.getElementById('spkSelect');
     if (!sel) return;
@@ -972,7 +911,7 @@ loadAgents();
 
 // 加载媒体库（扫描 media/ 目录）
 function loadMediaLib() {
-  fetch(API+'/widget/api/files').then(function(r){return r.json();}).then(function(data){
+  fetch(API+'/widget?action=media_files').then(function(r){return r.json();}).then(function(data){
     if(!data||!data.ok)return;
     trks = []; idx = 0; playing = false;
     (data.files||[]).forEach(function(f){
@@ -986,7 +925,7 @@ loadMediaLib();
 
 // 定时刷新媒体库（文件增删变化）
 setInterval(function(){
-  fetch(API+'/widget/api/files').then(function(r){return r.json();}).then(function(data){
+  fetch(API+'/widget?action=media_files').then(function(r){return r.json();}).then(function(data){
     if(!data||!data.ok)return;
     var newUrls = {};
     (data.files||[]).forEach(function(f){ newUrls[stripToken(f.url)] = f; });
@@ -1027,7 +966,7 @@ try {
 // ── Bus 控制面板 ──
 var lastBusCurrentUrl = '';
 function refreshBusState() {
-  fetch(API + '/bus/state').then(function(r){ return r.json(); }).then(function(st) {
+  fetch(API + '/widget?action=bus_state').then(function(r){ return r.json(); }).then(function(st) {
     if (!st || !st.ok) return;
     var dot = document.getElementById('busDot');
     var txt = document.getElementById('busStatusText');
@@ -1064,7 +1003,7 @@ document.getElementById('busSayBtn').addEventListener('click', function() {
   var text = document.getElementById('sayInput').value.trim();
   if (!text) return;
   var spk = document.getElementById('spkSelect').value;
-  fetch(API + '/bus/control', {
+  fetch(API + '/widget?action=bus_control', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'say', text: text, spk: spk })
@@ -1079,10 +1018,10 @@ document.getElementById('sayInput').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') document.getElementById('busSayBtn').click();
 });
 document.getElementById('busNextBtn').addEventListener('click', function() {
-  fetch(API + '/bus/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'next' }) }).then(function(){ refreshBusState(); }).catch(function(){});
+  fetch(API + '/widget?action=bus_control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'next' }) }).then(function(){ refreshBusState(); }).catch(function(){});
 });
 document.getElementById('busClearBtn').addEventListener('click', function() {
-  fetch(API + '/bus/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'clear' }) }).then(function(){ refreshBusState(); }).catch(function(){});
+  fetch(API + '/widget?action=bus_control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'clear' }) }).then(function(){ refreshBusState(); }).catch(function(){});
 });
 
 setInterval(refreshBusState, 2000);
