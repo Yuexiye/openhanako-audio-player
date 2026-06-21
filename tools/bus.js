@@ -9,6 +9,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { TTSBus } from "./tts-bus.js";
 
+function stripToken(url) {
+  if (!url) return url;
+  return url.split('?')[0];
+}
+
 const name = "audio_bus";
 const description = "音频总线编排引擎：解析 say/play/segue/reason 序列，驱动播放队列。";
 
@@ -254,6 +259,19 @@ export class AudioBus {
     this.status = "playing";
     this._saveState();
     return { ok: true, status: "playing" };
+  }
+
+  remove(index) {
+    if (index < 0 || index >= this.queue.length) return { ok: false, code: 'bad_index' };
+    this.queue.splice(index, 1);
+    this._saveQueue();
+    return { ok: true, queue: this.queue };
+  }
+
+  removeByUrl(url) {
+    const idx = this.queue.findIndex(it => it.type === 'play' && stripToken(it.url) === stripToken(url));
+    if (idx >= 0) return this.remove(idx);
+    return { ok: false, code: 'not_found' };
   }
 
   clear() {

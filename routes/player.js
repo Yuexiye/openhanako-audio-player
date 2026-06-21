@@ -144,6 +144,20 @@ setTimeout(n,100);
 
   // ── Bus 状态 ──
   const bus = new AudioBus({ pluginId, dataDir });
+
+  // ── 助手列表（说话人）──
+  app.get("/bus/agents", (c) => {
+    const agentsDir = path.resolve(__dirname, "..", "..", "..", "..", "zhiyi", "agents");
+    let agents = [];
+    try {
+      if (fs.existsSync(agentsDir)) {
+        const entries = fs.readdirSync(agentsDir, { withFileTypes: true });
+        agents = entries.filter(e => e.isDirectory()).map(e => ({ id: e.name, name: e.name }));
+      }
+    } catch (e) { console.warn("[bus] agents list failed:", e.message); }
+    return c.json({ ok: true, agents });
+  });
+
   app.get("/bus/state", (c) => {
     return c.json(bus.getState());
   });
@@ -171,6 +185,13 @@ setTimeout(n,100);
         case "resume":
           result = bus.resume();
           break;
+        case "remove": {
+          const idx = parseInt(body.index, 10);
+          if (!isNaN(idx)) result = bus.remove(idx);
+          else if (body.url) result = bus.removeByUrl(body.url);
+          else result = { ok: false, code: 'missing_index_or_url' };
+          break;
+        }
         case "clear":
           result = bus.clear();
           break;
@@ -664,7 +685,17 @@ function renderPL() {
     el.addEventListener('click',function(e){if(e.target.closest('.rm'))return;const i=parseInt(this.dataset.i);if(i===idx){toggle();return;}load(i);if(audio.paused){audio.play();playing=true;toggle();}});
   });
   document.getElementById('plBody').querySelectorAll('.rm').forEach(function(el){
-    el.addEventListener('click',function(e){e.stopPropagation();const i=parseInt(this.dataset.rm);trks.splice(i,1);if(i<=idx)idx=Math.max(0,idx-1);if(idx>=trks.length)idx=trks.length-1;if(trks.length)load(idx);else load(-1);renderPL();});
+    el.addEventListener('click',function(e){
+      e.stopPropagation();
+      var i = parseInt(this.dataset.rm);
+      var url = trks[i] ? trks[i].url : '';
+      if (!url) return;
+      fetch(API + '/bus/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'remove', url: url })
+      }).then(function(){ refreshBusState(); }).catch(function(){});
+    });
   });
 }
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -781,19 +812,41 @@ function stripToken(url) {
 // 加载持久化的电台预设（替换 HTML 默认值）
 loadPresets();
 
+// 加载助手列表填充说话人下拉框
+function loadAgents() {
+  fetch(API + '/bus/agents').then(function(r){ return r.json(); }).then(function(data) {
+    if (!data || !data.ok || !Array.isArray(data.agents)) return;
+    var sel = document.getElementById('spkSelect');
+    if (!sel) return;
+    sel.innerHTML = '';
+    data.agents.forEach(function(a) {
+      var opt = document.createElement('option');
+      opt.value = a.id;
+      opt.textContent = a.name;
+      sel.appendChild(opt);
+    });
+  }).catch(function(){});
+}
+loadAgents();
+
 // 加载队列
 fetch(API+'/widget/api/queue').then(function(r){return r.json();}).then(function(data){
   if(data&&data.length){data.forEach(function(t){addTrack(t.name,tok(t.url),t.mode);});}
 }).catch(function(){});
 
-// 定时检查新队列
+// 定时全量同步 Bus 状态到播放器（只添加缺失项，不删除）
 setInterval(function(){
-  fetch(API+'/widget/api/queue').then(function(r){return r.json();}).then(function(data){
-    if(data&&data.length){data.forEach(function(t){
-      if (!t.url) return;
-      var found=false;for(var i=0;i<trks.length;i++){if(stripToken(trks[i].url)===stripToken(tok(t.url))){found=true;break;}}
-      if(!found) addTrack(t.name,tok(t.url),t.mode);
-    });}
+  fetch(API+'/bus/state').then(function(r){return r.json();}).then(function(st){
+    if(!st||!st.ok)return;
+    var busUrls = [];
+    if(st.current && st.current.type==='play' && st.current.url) busUrls.push(stripToken(st.current.url));
+    (st.queue||[]).forEach(function(it){
+      if(it.type==='play' && it.url) busUrls.push(stripToken(it.url));
+    });
+    busUrls.forEach(function(url){
+      var found=false;for(var i=0;i<trks.length;i++){if(stripToken(trks[i].url)===url){found=true;break;}}
+      if(!found) addTrack(url.split('/').pop().split('?')[0]||'音频', tok(url), 'Bus');
+    });
   }).catch(function(){});
 }, 5000);
 
