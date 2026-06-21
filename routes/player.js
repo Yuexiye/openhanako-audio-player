@@ -756,6 +756,7 @@ audio.addEventListener('loadedmetadata',function(){document.getElementById('tota
 audio.addEventListener('ended',next);
 
 function addTrack(name,url,mode) {
+  if (!url) return;
   for(let i=0;i<trks.length;i++){if(trks[i].url===url){load(i);if(audio.paused){audio.play();playing=true;toggle();}return;}}
   trks.push({name:name||url.split('/').pop().split('\\\\').pop().split('?')[0]||'音频',url:url,mode:mode||(url.startsWith('http')?'在线':'本地'),dur:0});
   load(trks.length-1);if(audio.paused){audio.play();playing=true;toggle();}renderPL();
@@ -763,8 +764,15 @@ function addTrack(name,url,mode) {
 
 // 给 URL 加上 token
 function tok(url) {
+  if (!url) return url;
   if (!TOKEN) return url;
   return url + (url.indexOf('?') > -1 ? '&' : '?') + 'token=' + encodeURIComponent(TOKEN);
+}
+
+// 去除 URL 中的 token 参数（用于去重）
+function stripToken(url) {
+  if (!url) return url;
+  return url.split('?')[0];
 }
 
 // Demo tracks（可选：复制音频文件到 data/media/ 目录即可自动加载）
@@ -782,7 +790,8 @@ fetch(API+'/widget/api/queue').then(function(r){return r.json();}).then(function
 setInterval(function(){
   fetch(API+'/widget/api/queue').then(function(r){return r.json();}).then(function(data){
     if(data&&data.length){data.forEach(function(t){
-      var found=false;for(var i=0;i<trks.length;i++){if(trks[i].url===tok(t.url)){found=true;break;}}
+      if (!t.url) return;
+      var found=false;for(var i=0;i<trks.length;i++){if(stripToken(trks[i].url)===stripToken(tok(t.url))){found=true;break;}}
       if(!found) addTrack(t.name,tok(t.url),t.mode);
     });}
   }).catch(function(){});
@@ -805,6 +814,7 @@ try {
 } catch(e) {}
 
 // ── Bus 控制面板 ──
+var lastBusCurrentUrl = '';
 function refreshBusState() {
   fetch(API + '/bus/state').then(function(r){ return r.json(); }).then(function(st) {
     if (!st || !st.ok) return;
@@ -821,8 +831,19 @@ function refreshBusState() {
         qEl.innerHTML = '<div class="empty" style="padding:8px">队列为空</div>';
       } else {
         qEl.innerHTML = items.map(function(it) {
-          return '<div class="bus-queue-item">' + '<span class="type-tag">' + esc(it.type) + '</span>' + '<span class="item-text">' + esc(it.text || it.name || it.url || '') + '</span>' + '</div>';
+          var label = it.text || it.name || it.url || '';
+          if (it.type === 'segue') label = '过渡 ' + (it.duration || 3000) + 'ms';
+          if (it.type === 'reason') label = '备注: ' + (it.text || '');
+          return '<div class="bus-queue-item">' + '<span class="type-tag">' + esc(it.type) + '</span>' + '<span class="item-text">' + esc(label) + '</span>' + '</div>';
         }).join('');
+      }
+    }
+    // Bus current 是 play 类型且有 url 时，自动加入播放器
+    if (st.current && st.current.type === 'play' && st.current.url) {
+      var curUrl = stripToken(st.current.url);
+      if (curUrl && curUrl !== lastBusCurrentUrl) {
+        lastBusCurrentUrl = curUrl;
+        addTrack(st.current.name || st.current.url, tok(st.current.url), st.current.mode);
       }
     }
   }).catch(function(){});

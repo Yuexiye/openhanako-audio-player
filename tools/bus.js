@@ -7,6 +7,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { TTSBus } from "./tts-bus.js";
 
 const name = "audio_bus";
 const description = "音频总线编排引擎：解析 say/play/segue/reason 序列，驱动播放队列。";
@@ -58,12 +59,13 @@ export class AudioBus {
   constructor(ctx) {
     this.ctx = ctx;
     this.dataDir = ctx.dataDir;
-    this.queuePath = path.join(this.dataDir, "queue.json");
+    this.queuePath = path.join(this.dataDir, "bus-queue.json");
     this.statePath = path.join(this.dataDir, "bus-state.json");
     this.queue = [];
     this.current = null;
     this.history = [];
     this.status = "idle"; // idle | playing | error
+    this.ttsBus = new TTSBus(ctx); // 内置 TTS 降级链
     this._loadPersistent();
   }
 
@@ -170,30 +172,76 @@ export class AudioBus {
   // ── 播放控制 ──
 
   async next() {
-    if (!this.queue.length) {
-      this.current = null;
-      this.status = "idle";
+    while (this.queue.length > 0) {
+      const item = this.queue.shift();
+
+      // say → 调用 TTS 合成，转成 play 条目
+      if (item.type === "say") {
+        try {
+          const result = await this.ttsBus.synthesize(item.text, {
+            spk: item.spk,
+            instruct: item.instruct,
+          });
+          if (result.ok && result.url) {
+            const playItem = {
+              type: "play",
+              url: result.url,
+              name: item.text.length > 20 ? item.text.slice(0, 20) + "…" : item.text,
+              mode: result.layer === "cosyvoice" ? "本地" : "在线",
+              _origin: item, // 保留原始 say 信息
+            };
+            this.current = playItem;
+            this.status = "playing";
+            this._saveQueue();
+            this._saveState();
+            this.history.push({ ...item, playedAt: Date.now() });
+            this._saveState();
+            return { ok: true, event: "track_start", item: playItem };
+          }
+        } catch (e) {
+          console.warn("[bus] say TTS failed:", e.message);
+        }
+        // TTS 失败，跳过，继续下一个
+        this.history.push({ ...item, playedAt: Date.now(), skipped: true });
+        this._saveState();
+        continue;
+      }
+
+      // reason → 不占播放时间，立即下一个
+      if (item.type === "reason") {
+        this.history.push({ ...item, playedAt: Date.now() });
+        this._saveState();
+        continue;
+      }
+
+      // segue → 过渡（静音/淡入淡出）
+      if (item.type === "segue") {
+        this.current = item;
+        this.status = "playing";
+        this._saveQueue();
+        this._saveState();
+        this.history.push({ ...item, playedAt: Date.now() });
+        this._saveState();
+        // 前端/后端通用：到达 segue 后自动等待并 next
+        setTimeout(() => this.next(), item.duration || 3000);
+        return { ok: true, event: "track_start", item };
+      }
+
+      // play → 直接播放
+      this.current = item;
+      this.status = "playing";
+      this._saveQueue();
       this._saveState();
-      return { ok: true, event: "bus_idle" };
+      this.history.push({ ...item, playedAt: Date.now() });
+      this._saveState();
+      return { ok: true, event: "track_start", item };
     }
 
-    const item = this.queue.shift();
-    this.current = item;
-    this.status = "playing";
-    this._saveQueue();
+    // 队列清空
+    this.current = null;
+    this.status = "idle";
     this._saveState();
-
-    // 触发事件
-    const event = { event: "track_start", item };
-    this.history.push({ ...item, playedAt: Date.now() });
-    this._saveState();
-
-    // 如果是 segue，自动等待后 next
-    if (item.type === "segue") {
-      setTimeout(() => this.next(), item.duration || 3000);
-    }
-
-    return { ok: true, event: "track_start", item };
+    return { ok: true, event: "bus_idle" };
   }
 
   pause() {
