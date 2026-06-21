@@ -108,6 +108,16 @@ async function execute(input, { sessionPath, pluginId, dataDir }) {
     };
   }
 
+  // 写入 _names.json 映射（文件名 → 完整文本）
+  const namesPath = path.join(dataDir, 'media', '_names.json');
+  try {
+    const namesMap = fs.existsSync(namesPath) ? JSON.parse(fs.readFileSync(namesPath, 'utf-8')) : {};
+    namesMap[`${taskId}.wav`] = text;
+    const tmpNames = namesPath + '.tmp.' + process.pid;
+    fs.writeFileSync(tmpNames, JSON.stringify(namesMap, null, 2), 'utf-8');
+    fs.renameSync(tmpNames, namesPath);
+  } catch (e) { console.warn('[tts] _names.json write failed:', e.message); }
+
   // 加入播放队列
   const fileName = `${taskId}.wav`;
   const mediaUrl = `/api/plugins/${pluginId}/widget/media/${encodeURIComponent(fileName)}`;

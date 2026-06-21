@@ -148,6 +148,16 @@ export class TTSBus {
       throw new Error(`CosyVoice 执行完成但未找到输出文件: ${outputFile}`);
     }
 
+    // 写入 _names.json 映射
+    const namesPath = path.join(this.dataDir, "media", "_names.json");
+    try {
+      const namesMap = fs.existsSync(namesPath) ? JSON.parse(fs.readFileSync(namesPath, "utf-8")) : {};
+      namesMap[`${taskId}.wav`] = text;
+      const tmpNames = namesPath + '.tmp.' + process.pid;
+      fs.writeFileSync(tmpNames, JSON.stringify(namesMap, null, 2), "utf-8");
+      fs.renameSync(tmpNames, namesPath);
+    } catch (e) { console.warn('[tts-bus] _names.json write failed:', e.message); }
+
     const mediaUrl = `/api/plugins/${this.pluginId}/widget/media/${encodeURIComponent(`${taskId}.wav`)}`;
     return {
       ok: true,

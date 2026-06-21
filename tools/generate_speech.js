@@ -38,6 +38,16 @@ async function execute(input, toolCtx) {
     // 提取原文件名（不含扩展名）作为显示名
     const origBasename = path.basename(filePathInput, path.extname(filePathInput));
 
+    // 写入 _names.json 映射
+    const namesPath = path.join(mediaDir, '_names.json');
+    try {
+      const namesMap = fs.existsSync(namesPath) ? JSON.parse(fs.readFileSync(namesPath, 'utf-8')) : {};
+      namesMap[filename] = origBasename;
+      const tmpNames = namesPath + '.tmp.' + process.pid;
+      fs.writeFileSync(tmpNames, JSON.stringify(namesMap, null, 2), 'utf-8');
+      fs.renameSync(tmpNames, namesPath);
+    } catch (e) { console.warn('[generate_speech] _names.json write failed:', e.message); }
+
     if (toolCtx.stageFile && toolCtx.sessionPath) {
       try {
         await toolCtx.stageFile({ sessionPath: toolCtx.sessionPath, filePath: destPath, label: "audio" });
