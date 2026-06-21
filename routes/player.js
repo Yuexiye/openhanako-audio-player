@@ -147,8 +147,8 @@ setTimeout(n,100);
 
   // ── 助手列表（说话人）──
   app.get("/bus/agents", (c) => {
-    // 从 Work 目录的 zhiyi/agents 读取助手列表
-    const agentsDir = path.resolve(process.env.USERPROFILE ? path.join(process.env.USERPROFILE, '.hanako', 'Work') : 'W:/Games/Hanako/Work', 'zhiyi', 'agents');
+    // Work 目录固定路径
+    const agentsDir = path.resolve("W:/Games/Hanako/Work/zhiyi/agents");
     let agents = [];
     try {
       if (fs.existsSync(agentsDir)) {
