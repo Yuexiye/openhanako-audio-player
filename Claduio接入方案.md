@@ -232,10 +232,10 @@ export class TTSBus {
 ### Phase 1：Bus 协议骨架（预计 2h）
 
 - [x] 方案文档审查（本文件）
-- [ ] `tools/bus.js` 实现 `AudioBus` 类
-- [ ] `tools/tts-bus.js` 实现 `TTSBus` 类（含 L1/L2/L3 接口）
-- [ ] `routes/player.js` 新增 `/bus/state` 和 `/bus/control` 端点
-- [ ] 前端 widget 新增 Bus 控制面板（播放/暂停/下一首/队列列表）
+- [x] `tools/bus.js` 实现 `AudioBus` 类
+- [x] `tools/tts-bus.js` 实现 `TTSBus` 类（含 L1/L2/L3 接口）
+- [x] `routes/player.js` 新增 `/bus/state` 和 `/bus/control` 端点
+- [x] 前端 widget 新增 Bus 控制面板（播放/暂停/下一首/队列列表/say 输入框）
 
 ### Phase 2：场景编排（预计 3h）
 
