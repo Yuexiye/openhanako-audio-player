@@ -17,9 +17,54 @@ export default function (app, ctx) {
   const dataDir = ctx.dataDir;
   const mediaDir = path.join(dataDir, "media");
   fs.mkdirSync(mediaDir, { recursive: true });
-  // 兼容 dev 模式：工具把文件复制到 plugin-data 目录，路由需要同时检查两个位置
+  // 兼容 dev 模式：工具把文件复制到 plugin-data 目录，路由需要同时检查多个位置
   const home = process.env.USERPROFILE || process.env.HOME || "";
   const pluginDataMediaDir = home ? path.join(home, ".hanako", "plugin-data", "hanako-audio-player", "media") : null;
+  // 额外扫描路径（用户配置的 plugin-data 位置）
+  const extraMediaDirs = [];
+  try {
+    if (process.env.HANAKO_PLUGIN_DATA) {
+      extraMediaDirs.push(path.join(process.env.HANAKO_PLUGIN_DATA, "hanako-audio-player", "media"));
+    }
+    // 常见变体：Work 目录下的 .hanako
+    const workHanako = path.resolve("W:/Games/Hanako/.hanako/plugin-data/hanako-audio-player/media");
+    if (fs.existsSync(workHanako)) extraMediaDirs.push(workHanako);
+  } catch (e) {}
+
+  function collectMediaFiles() {
+    const files = [];
+    const seen = new Set();
+    const dirsToScan = [mediaDir];
+    if (pluginDataMediaDir) dirsToScan.push(pluginDataMediaDir);
+    extraMediaDirs.forEach(d => dirsToScan.push(d));
+    for (const dir of dirsToScan) {
+      try {
+        if (!fs.existsSync(dir)) continue;
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isFile()) continue;
+          const ext = path.extname(entry.name).slice(1).toLowerCase();
+          if (!['mp3','wav','ogg','flac','m4a','webm'].includes(ext)) continue;
+          const fullPath = path.join(dir, entry.name);
+          const stat = fs.statSync(fullPath);
+          // 按路径去重，避免同一文件被扫描多次
+          const key = fullPath.toLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          // URL 指向 plugin-data 路径（如果有）
+          let url;
+          if (dir === pluginDataMediaDir || extraMediaDirs.includes(dir)) {
+            url = `/api/plugins/${pluginId}/widget/media/${encodeURIComponent(entry.name)}`;
+          } else {
+            url = `/api/plugins/${pluginId}/widget/media/${encodeURIComponent(entry.name)}`;
+          }
+          files.push({ name: entry.name, size: stat.size, mtime: stat.mtimeMs, url, _dir: dir });
+        }
+      } catch (e) { console.warn('[media] scan failed:', dir, e.message); }
+    }
+    files.sort((a, b) => b.mtime - a.mtime);
+    return files;
+  }
 
   // ── Widget 页面 ──
   app.get("/widget", (c) => {
@@ -218,26 +263,10 @@ setTimeout(n,100);
     return c.json([]);
   });
 
-  // ── 媒体库（扫描 media/ 目录）──
+  // ── 媒体库（扫描多个 media/ 目录）──
   app.get("/widget/api/files", (c) => {
     try {
-      const files = [];
-      const entries = fs.readdirSync(mediaDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isFile()) {
-          const ext = path.extname(entry.name).slice(1).toLowerCase();
-          if (['mp3','wav','ogg','flac','m4a','webm'].includes(ext)) {
-            const stat = fs.statSync(path.join(mediaDir, entry.name));
-            files.push({
-              name: entry.name,
-              size: stat.size,
-              mtime: stat.mtimeMs,
-              url: `/api/plugins/${pluginId}/widget/media/${encodeURIComponent(entry.name)}`,
-            });
-          }
-        }
-      }
-      files.sort((a, b) => b.mtime - a.mtime);
+      const files = collectMediaFiles().map(({ name, size, mtime, url }) => ({ name, size, mtime, url }));
       return c.json({ ok: true, files });
     } catch (e) {
       return c.json({ ok: false, error: e.message }, 500);
@@ -251,16 +280,26 @@ setTimeout(n,100);
       if (!filename || filename.includes("/") || filename.includes("\\") || filename.includes("..")) {
         return c.json({ ok: false, error: "invalid filename" }, 400);
       }
-      const filePath = path.join(mediaDir, filename);
-      if (!fs.existsSync(filePath)) {
-        return c.json({ ok: false, error: "not found" }, 404);
+      // 在所有可能的 media 目录中查找并删除
+      const dirsToScan = [mediaDir];
+      if (pluginDataMediaDir) dirsToScan.push(pluginDataMediaDir);
+      extraMediaDirs.forEach(d => dirsToScan.push(d));
+      let deleted = false;
+      for (const dir of dirsToScan) {
+        const filePath = path.join(dir, filename);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+          deleted = true;
+          break;
+        }
       }
-      fs.unlinkSync(filePath);
+      if (!deleted) return c.json({ ok: false, error: "not found" }, 404);
       // 同步清理 bus-queue.json 中的引用
       try {
         const bus = new AudioBus({ pluginId, dataDir });
+        const targetUrl = `/api/plugins/${pluginId}/widget/media/${encodeURIComponent(filename)}`;
         bus.queue = bus.queue.filter(it => {
-          if (it.type === 'play' && it.url) return stripToken(it.url) !== stripToken(`/api/plugins/${pluginId}/widget/media/${encodeURIComponent(filename)}`);
+          if (it.type === 'play' && it.url) return stripToken(it.url) !== stripToken(targetUrl);
           return true;
         });
         bus._saveQueue();
