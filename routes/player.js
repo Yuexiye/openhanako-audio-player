@@ -147,7 +147,8 @@ setTimeout(n,100);
 
   // ── 助手列表（说话人）──
   app.get("/bus/agents", (c) => {
-    const agentsDir = path.resolve(__dirname, "..", "..", "..", "..", "zhiyi", "agents");
+    // 从 Work 目录的 zhiyi/agents 读取助手列表
+    const agentsDir = path.resolve(process.env.USERPROFILE ? path.join(process.env.USERPROFILE, '.hanako', 'Work') : 'W:/Games/Hanako/Work', 'zhiyi', 'agents');
     let agents = [];
     try {
       if (fs.existsSync(agentsDir)) {
@@ -834,7 +835,7 @@ fetch(API+'/widget/api/queue').then(function(r){return r.json();}).then(function
   if(data&&data.length){data.forEach(function(t){addTrack(t.name,tok(t.url),t.mode);});}
 }).catch(function(){});
 
-// 定时全量同步 Bus 状态到播放器（只添加缺失项，不删除）
+// 定时全量同步 Bus 状态到播放器
 setInterval(function(){
   fetch(API+'/bus/state').then(function(r){return r.json();}).then(function(st){
     if(!st||!st.ok)return;
@@ -843,10 +844,32 @@ setInterval(function(){
     (st.queue||[]).forEach(function(it){
       if(it.type==='play' && it.url) busUrls.push(stripToken(it.url));
     });
+    // 添加 Bus 有但 trks 没有的
     busUrls.forEach(function(url){
       var found=false;for(var i=0;i<trks.length;i++){if(stripToken(trks[i].url)===url){found=true;break;}}
       if(!found) addTrack(url.split('/').pop().split('?')[0]||'音频', tok(url), 'Bus');
     });
+    // 移除 trks 有但 Bus 没有的
+    var removedAny = false;
+    for(var i=trks.length-1;i>=0;i--){
+      var tu = stripToken(trks[i].url);
+      if(!busUrls.includes(tu)){
+        // 如果正在播放这首，停止播放
+        if(i===idx){
+          audio.pause();
+          playing=false;
+          document.getElementById('playIcon').style.display='block';
+          document.getElementById('pauseIcon').style.display='none';
+        }
+        trks.splice(i,1);
+        removedAny = true;
+      }
+    }
+    if(removedAny){
+      if(idx>=trks.length) idx=Math.max(0,trks.length-1);
+      if(trks.length) load(idx); else load(-1);
+      renderPL();
+    }
   }).catch(function(){});
 }, 5000);
 
