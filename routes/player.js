@@ -162,6 +162,23 @@ setTimeout(n,100);
     }
   });
 
+  // ── Speakers API ──
+  app.get("/widget/api/speakers", (c) => {
+    try {
+      const cosyBase = process.env.COSYVOICE_BASE || "W:/Games/Hanako/Work/cosyvoice-tts";
+      const refsPath = path.join(cosyBase, "speaker_refs.json");
+      if (fs.existsSync(refsPath)) {
+        const refs = JSON.parse(fs.readFileSync(refsPath, "utf-8"));
+        const cnMap = { ophelia:"奥菲莉娅", aimis:"爱弥斯", alice:"艾莉丝", luoqixi:"洛琪希", glados:"GLaDOS", rebecca:"瑞贝卡", rebecca_normal:"瑞贝卡(混合)", my_voice:"我的声音" };
+        const speakers = Object.keys(refs).map(function(id){ return { id:id, name:cnMap[id]||id }; });
+        return c.json({ ok:true, speakers:speakers });
+      }
+      return c.json({ ok:true, speakers:[{id:"my_voice",name:"我的声音"}] });
+    } catch(e) {
+      return c.json({ ok:false, speakers:[{id:"my_voice",name:"我的声音"}] });
+    }
+  });
+
   // ── Bus API（节目编排引擎）──
   app.get("/widget/api/bus/state", (c) => {
     try {
@@ -675,14 +692,14 @@ body {
 .bus-say-input::placeholder { color:var(--text-faint); }
 .bus-say-input:focus { border-color:var(--accent); }
 .bus-spk-input {
-  width:70px; flex-shrink:0;
+  width:80px; flex-shrink:0;
   background:var(--surface); border:1px solid var(--border); border-radius:7px;
-  color:var(--text); font-size:11px; padding:5px 8px;
+  color:var(--text); font-size:11px; padding:5px 6px;
   outline:none; font-family:inherit;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s; cursor:pointer;
 }
-.bus-spk-input::placeholder { color:var(--text-faint); }
 .bus-spk-input:focus { border-color:var(--accent); }
+.bus-play-row { display:flex; gap:6px; padding:0 14px 8px; }
 .bus-say-btn {
   background:linear-gradient(135deg, var(--accent), #c48454);
   border:none; border-radius:7px; color:#fff;
@@ -769,15 +786,6 @@ body {
 }
 .bus-say-input::placeholder { color:var(--text-faint); }
 .bus-say-input:focus { border-color:var(--accent); }
-.bus-spk-input {
-  width:70px; flex-shrink:0;
-  background:var(--surface); border:1px solid var(--border); border-radius:7px;
-  color:var(--text); font-size:11px; padding:5px 8px;
-  outline:none; font-family:inherit;
-  transition: border-color 0.15s;
-}
-.bus-spk-input::placeholder { color:var(--text-faint); }
-.bus-spk-input:focus { border-color:var(--accent); }
 .bus-say-btn {
   background:var(--accent-soft); border:1px solid var(--accent); border-radius:7px;
   color:var(--accent); font-size:11px; padding:5px 12px;
@@ -937,8 +945,12 @@ body {
       </div>
       <div class="bus-say-row">
         <input class="bus-say-input" id="busSayInput" type="text" placeholder="输入串场文本，回车合成语音…" spellcheck="false">
-        <input class="bus-spk-input" id="busSpkInput" type="text" placeholder="说话人" spellcheck="false" value="my_voice" title="说话人ID">
+        <select class="bus-spk-input" id="busSpkSelect" title="说话人"></select>
         <button class="bus-say-btn" id="busSayBtn">Say</button>
+      </div>
+      <div class="bus-play-row">
+        <input class="bus-say-input" id="busPlayInput" type="text" placeholder="输入音频 URL，回车添加到编排队列…" spellcheck="false">
+        <button class="bus-say-btn" id="busPlayAddBtn" style="background:var(--surface);border:1px solid var(--border);color:var(--text-dim);box-shadow:none;">Add</button>
       </div>
       <div class="bus-queue" id="busQueue"></div>
     </div>
@@ -1388,12 +1400,32 @@ document.getElementById('busClearBtn').addEventListener('click',function(){busCo
 document.getElementById('busSayBtn').addEventListener('click',function(){
   var text=document.getElementById('busSayInput').value.trim();
   if(!text)return;
+  var spk=document.getElementById('busSpkSelect').value||'my_voice';
   document.getElementById('busSayInput').value='';
-  busControl('say',{text:text});
+  busControl('say',{text:text,spk:spk});
 });
 document.getElementById('busSayInput').addEventListener('keydown',function(e){
   if(e.key==='Enter')document.getElementById('busSayBtn').click();
 });
+// 添加播放条目到 Bus 队列
+document.getElementById('busPlayAddBtn').addEventListener('click',function(){
+  var url=document.getElementById('busPlayInput').value.trim();
+  if(!url)return;
+  document.getElementById('busPlayInput').value='';
+  busControl('play',{url:url,name:url.split('/').pop().split('?')[0]||'音频'});
+});
+document.getElementById('busPlayInput').addEventListener('keydown',function(e){
+  if(e.key==='Enter')document.getElementById('busPlayAddBtn').click();
+});
+// 加载说话人列表
+fetch(API+'/widget/api/speakers').then(function(r){return r.json();}).then(function(data){
+  if(data&&data.speakers){
+    var sel=document.getElementById('busSpkSelect');
+    sel.innerHTML=data.speakers.map(function(s){
+      return '<option value="'+s.id+'">'+s.name+'</option>';
+    }).join('');
+  }
+}).catch(function(){});
 // 定时刷新 bus 状态（面板打开时）
 setInterval(function(){ if(busOpen) refreshBus(); }, 3000);
 
