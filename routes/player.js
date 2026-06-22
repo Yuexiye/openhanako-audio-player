@@ -1675,14 +1675,16 @@ function applyScene(key){
   if(!scene) return;
   // UI 高亮
   document.querySelectorAll('.scene-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.scene===key); });
-  // 获取当前 Bus 队列，追加场景条目（而非覆盖）
-  fetch(API+'/widget/api/bus/state').then(function(r){return r.json();}).then(function(state){
-    var existing = (state.queue || []).filter(function(item){ return item.type !== 'say' || item._origin; });
-    var merged = existing.concat(scene.playlist);
+  // 场景切换 = 替换 Bus 队列（先 clear 再 load）
+  fetch(API+'/widget/api/bus/control',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({action:'clear'})
+  }).then(function(){
     return fetch(API+'/widget/api/bus/control',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'load', playlist:merged})
+      body:JSON.stringify({action:'load', playlist:scene.playlist})
     });
   }).then(function(r){return r.json();}).then(function(res){
     refreshBus();
