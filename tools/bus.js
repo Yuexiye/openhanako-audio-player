@@ -68,9 +68,10 @@ export class AudioBus {
     this.statePath = path.join(this.dataDir, "bus-state.json");
     this.queue = [];
     this.current = null;
+    this.currentIndex = -1;
     this.history = [];
     this.status = "idle"; // idle | playing | error
-    this.ttsBus = new TTSBus(ctx); // 内置 TTS 降级链
+    this.ttsBus = new TTSBus(ctx);
     this._loadPersistent();
   }
 
@@ -111,7 +112,8 @@ export class AudioBus {
       const st = {
         status: this.status,
         current: this.current,
-        history: this.history.slice(-100), // 只保留最近100条
+        currentIndex: this.currentIndex,
+        history: this.history.slice(-100),
         updatedAt: Date.now(),
       };
       const tmp = this.statePath + ".tmp." + process.pid;
@@ -130,6 +132,7 @@ export class AudioBus {
     }
     this.queue = playlist.map((item) => this._normalize(item));
     this.current = null;
+    this.currentIndex = -1;
     this.status = "idle";
     this._saveQueue();
     this._saveState();
@@ -177,76 +180,86 @@ export class AudioBus {
   // ── 播放控制 ──
 
   async next() {
-    while (this.queue.length > 0) {
-      const item = this.queue.shift();
+    // 指针式播放：不消费队列，currentIndex 前进
+    if (this.currentIndex < this.queue.length - 1) {
+      this.currentIndex++;
+      return this._playCurrent();
+    }
+    // 已在最后一项，循环到开头
+    if (this.queue.length > 0) {
+      this.currentIndex = 0;
+      return this._playCurrent();
+    }
+    // 队列空
+    this.current = null;
+    this.status = "idle";
+    this._saveState();
+    return { ok: true, event: "bus_idle" };
+  }
 
-      // say → 调用 TTS 合成，转成 play 条目
-      if (item.type === "say") {
-        try {
-          const result = await this.ttsBus.synthesize(item.text, {
-            spk: item.spk,
-            instruct: item.instruct,
-          });
-          if (result.ok && result.url) {
-            const playItem = {
-              type: "play",
-              url: result.url,
-              name: item.text.length > 20 ? item.text.slice(0, 20) + "…" : item.text,
-              mode: result.layer === "cosyvoice" ? "本地" : "在线",
-              _origin: item, // 保留原始 say 信息
-            };
-            this.current = playItem;
-            this.status = "playing";
-            this._saveQueue();
-            this._saveState();
-            this.history.push({ ...item, playedAt: Date.now() });
-            this._saveState();
-            return { ok: true, event: "track_start", item: playItem };
-          }
-        } catch (e) {
-          console.warn("[bus] say TTS failed:", e.message);
+  async _playCurrent() {
+    const item = this.queue[this.currentIndex];
+    if (!item) return { ok: true, event: "bus_idle" };
+
+    if (item.type === "say") {
+      this.current = item;
+      this.status = "playing";
+      this._saveState();
+      try {
+        const result = await this.ttsBus.synthesize(item.text, {
+          spk: item.spk,
+          instruct: item.instruct,
+        });
+        if (result.ok && result.url) {
+          const playItem = {
+            type: "play",
+            url: result.url,
+            name: item.text.length > 20 ? item.text.slice(0, 20) + "…" : item.text,
+            mode: result.layer === "cosyvoice" ? "本地" : "在线",
+            _origin: item,
+          };
+          this.queue[this.currentIndex] = playItem;
+          this.current = playItem;
+          this._saveQueue();
+          this._saveState();
+          this.history.push({ ...item, playedAt: Date.now(), synthesized: true });
+          this._saveState();
+          return { ok: true, event: "track_start", item: playItem };
         }
-        // TTS 失败，跳过，继续下一个
-        this.history.push({ ...item, playedAt: Date.now(), skipped: true });
-        this._saveState();
-        continue;
+      } catch (e) {
+        console.warn("[bus] say TTS failed:", e.message);
       }
+      // TTS 失败，跳到下一个
+      this.history.push({ ...item, playedAt: Date.now(), skipped: true });
+      this._saveState();
+      return this.next();
+    }
 
-      // reason → 不占播放时间，立即下一个
-      if (item.type === "reason") {
-        this.history.push({ ...item, playedAt: Date.now() });
-        this._saveState();
-        continue;
-      }
+    if (item.type === "reason") {
+      this.history.push({ ...item, playedAt: Date.now() });
+      this._saveState();
+      return this.next();
+    }
 
-      // segue → 过渡（静音/淡入淡出）
-      if (item.type === "segue") {
-        this.current = item;
-        this.status = "playing";
-        this._saveQueue();
-        this._saveState();
-        this.history.push({ ...item, playedAt: Date.now() });
-        this._saveState();
-        // 前端/后端通用：到达 segue 后自动等待并 next
-        setTimeout(() => this.next(), item.duration || 3000);
-        return { ok: true, event: "track_start", item };
-      }
-
-      // play → 直接播放
+    if (item.type === "segue") {
       this.current = item;
       this.status = "playing";
       this._saveQueue();
       this._saveState();
       this.history.push({ ...item, playedAt: Date.now() });
       this._saveState();
+      setTimeout(() => this.next(), item.duration || 3000);
       return { ok: true, event: "track_start", item };
     }
 
-    // 队列清空
-    this.current = null;
-    this.status = "idle";
+    // play
+    this.current = item;
+    this.status = "playing";
+    this._saveQueue();
     this._saveState();
-    return { ok: true, event: "bus_idle" };
+    this.history.push({ ...item, playedAt: Date.now() });
+    this._saveState();
+    return { ok: true, event: "track_start", item };
   }
 
   pause() {
@@ -264,7 +277,9 @@ export class AudioBus {
   remove(index) {
     if (index < 0 || index >= this.queue.length) return { ok: false, code: 'bad_index' };
     this.queue.splice(index, 1);
+    if (index <= this.currentIndex) this.currentIndex = Math.max(-1, this.currentIndex - 1);
     this._saveQueue();
+    this._saveState();
     return { ok: true, queue: this.queue };
   }
 
@@ -277,6 +292,7 @@ export class AudioBus {
   clear() {
     this.queue = [];
     this.current = null;
+    this.currentIndex = -1;
     this.status = "idle";
     this._saveQueue();
     this._saveState();
@@ -288,6 +304,7 @@ export class AudioBus {
       ok: true,
       status: this.status,
       current: this.current,
+      currentIndex: this.currentIndex,
       queue: this.queue,
       history: this.history.slice(-20),
     };

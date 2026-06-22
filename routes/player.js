@@ -165,16 +165,30 @@ setTimeout(n,100);
   // ── Speakers API ──
   app.get("/widget/api/speakers", (c) => {
     try {
-      const cosyBase = process.env.COSYVOICE_BASE || "W:/Games/Hanako/Work/cosyvoice-tts";
-      const refsPath = path.join(cosyBase, "speaker_refs.json");
-      if (fs.existsSync(refsPath)) {
-        const refs = JSON.parse(fs.readFileSync(refsPath, "utf-8"));
-        const cnMap = { ophelia:"奥菲莉娅", aimis:"爱弥斯", alice:"艾莉丝", luoqixi:"洛琪希", glados:"GLaDOS", rebecca:"瑞贝卡", rebecca_normal:"瑞贝卡(混合)", my_voice:"我的声音" };
-        const speakers = Object.keys(refs).map(function(id){ return { id:id, name:cnMap[id]||id }; });
-        return c.json({ ok:true, speakers:speakers });
+      const cosyBase = process.env.COSYVOICE_BASE || "";
+      const home = process.env.USERPROFILE || process.env.HOME || "";
+      const candidates = [
+        cosyBase,
+        "W:/Games/Hanako/Work/cosyvoice-tts",
+        path.join(home, "W", "Games", "Hanako", "Work", "cosyvoice-tts"),
+        path.join(home, "cosyvoice-tts"),
+        path.join(home, "CosyVoice"),
+        path.join(home, "CosyVoice2"),
+      ].filter(Boolean);
+      for (const base of candidates) {
+        const refsPath = path.join(base, "speaker_refs.json");
+        if (fs.existsSync(refsPath)) {
+          try {
+            const refs = JSON.parse(fs.readFileSync(refsPath, "utf-8"));
+            const cnMap = { ophelia:"奥菲莉娅", aimis:"爱弥斯", alice:"艾莉丝", luoqixi:"洛琪希", glados:"GLaDOS", rebecca:"瑞贝卡", rebecca_normal:"瑞贝卡(混合)", my_voice:"我的声音" };
+            const speakers = Object.keys(refs).map(function(id){ return { id:id, name:cnMap[id]||id }; });
+            return c.json({ ok:true, speakers:speakers });
+          } catch(e) { console.warn('[speakers] parse failed for', refsPath, e.message); }
+        }
       }
       return c.json({ ok:true, speakers:[{id:"my_voice",name:"我的声音"}] });
     } catch(e) {
+      console.warn('[speakers] endpoint error:', e.message);
       return c.json({ ok:false, speakers:[{id:"my_voice",name:"我的声音"}] });
     }
   });
@@ -1393,7 +1407,13 @@ function busControl(action,extra){
     return res;
   });
 }
-document.getElementById('busPlayBtn').addEventListener('click',function(){busControl('resume');});
+document.getElementById('busPlayBtn').addEventListener('click',function(){
+  fetch(API+'/widget/api/bus/state').then(function(r){return r.json();}).then(function(s){
+    if(s.status==='paused'){busControl('resume');}
+    else if(s.status==='playing'){}
+    else if(s.queue && s.queue.length){busControl('next');}
+  }).catch(function(){});
+});
 document.getElementById('busPauseBtn').addEventListener('click',function(){busControl('pause');});
 document.getElementById('busNextBtn').addEventListener('click',function(){busControl('next');});
 document.getElementById('busClearBtn').addEventListener('click',function(){busControl('clear');});
