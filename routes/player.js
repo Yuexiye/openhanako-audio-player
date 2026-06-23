@@ -1732,48 +1732,18 @@ function doPlaylistImport(){
   var canvas = document.getElementById('visualizer');
   if (!canvas) return;
   var ctx = canvas.getContext('2d');
-  var actx = null, analyser = null, dataArr = null, visRAF = null;
+  var visRAF = null;
   var BAR_COUNT = 48;
   var BAR_GAP = 1.5;
   var AMBER = '#d4a76a';
   var AMBER_DIM = 'rgba(212,167,106,0.15)';
-  var LIGHT_AMBER = '#c49a5a';
 
   // 尊 prefers-reduced-motion
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
-  var isLocalSrc = true; // 跟踪当前源是否本地 (无 CORS 限制)
-  var simPhase = 0; // 模拟波形相位
+  var simPhase = 0;
 
-  // 监听音频源变化，检测是否外部链接
-  var origSrc = '';
-  function checkSrc() {
-    var cur = audio.currentSrc || audio.src || '';
-    if (cur !== origSrc) {
-      origSrc = cur;
-      // 以 /widget/ 开头的是本地代理，其他 http URL 是外部的
-      isLocalSrc = cur.startsWith('/widget/') || (!cur.startsWith('http'));
-    }
-  }
-
-  function initAudio() {
-    if (actx) return;
-    try {
-      actx = new (window.AudioContext || window.webkitAudioContext)();
-      analyser = actx.createAnalyser();
-      analyser.fftSize = 128;
-      analyser.smoothingTimeConstant = 0.78;
-      var src = actx.createMediaElementSource(audio);
-      src.connect(analyser);
-      analyser.connect(actx.destination);
-      dataArr = new Uint8Array(analyser.frequencyBinCount);
-    } catch(e) {
-      console.warn('Visualizer: AudioContext init failed', e);
-      actx = null;
-    }
-  }
-
-  // 简单伪随机 (基于种子的正弦混合)
+  // 伪随机波形 (基于正弦混合，随时间变化)
   function pseudoBar(i, phase) {
     return 0.3 + 0.35 * Math.sin(i*0.7+phase*1.3) + 0.2 * Math.sin(i*1.9+phase*0.7) + 0.15 * Math.cos(i*2.3+phase*2.1);
   }
@@ -1783,32 +1753,15 @@ function doPlaylistImport(){
     var w = canvas.width = canvas.clientWidth * (window.devicePixelRatio||1);
     var h = canvas.height = canvas.clientHeight * (window.devicePixelRatio||1);
     ctx.clearRect(0,0,w,h);
-    checkSrc();
     if (audio.paused) { drawSilent(w,h); return; }
 
-    // 本地音频 → 真实频谱; 外部音频 → 模拟波形 (避免 CORS 静音)
-    if (isLocalSrc && analyser && dataArr) {
-      try { analyser.getByteFrequencyData(dataArr); } catch(e) { dataArr = null; }
-    }
-    var useReal = isLocalSrc && dataArr && dataArr.some(function(v){return v>0;});
-
+    // 全部使用模拟波形 — 避免 createMediaElementSource 的 CORS 静音问题
+    simPhase += 0.04;
+    var vol = audio.volume || 1;
     var barW = (w - BAR_GAP * (BAR_COUNT-1)) / BAR_COUNT;
-    if (useReal) {
-      var step = Math.max(1, Math.floor(dataArr.length / BAR_COUNT));
-      for (var i=0; i<BAR_COUNT; i++) {
-        var val = dataArr[i * step] || 0;
-        drawBar(w,h,barW,i, val/255);
-      }
-    } else if (!audio.paused) {
-      // 模拟模式：随时间变化的伪随机波形
-      simPhase += 0.04;
-      var vol = audio.volume || 1;
-      for (var i=0; i<BAR_COUNT; i++) {
-        var val = pseudoBar(i, simPhase) * vol;
-        drawBar(w,h,barW,i, val);
-      }
-    } else {
-      drawSilent(w,h);
+    for (var i=0; i<BAR_COUNT; i++) {
+      var val = pseudoBar(i, simPhase) * vol;
+      drawBar(w,h,barW,i, val);
     }
   }
 
@@ -1842,24 +1795,13 @@ function doPlaylistImport(){
     }
   }
 
-  // 首次交互时初始化 AudioContext（浏览器限制）
   function startVis() {
-    initAudio();
-    if (actx && actx.state === 'suspended') actx.resume();
     if (!visRAF) draw();
   }
 
   audio.addEventListener('play', startVis);
-  audio.addEventListener('pause', function(){});
-  // 点击任何控件也可能触发
-  document.addEventListener('click', function onFirstClick(){
-    if (!actx) { startVis(); }
-  }, {once:true});
-
-  // 初始画静默条
   draw();
 })();
-
 var busOpen=false;
 document.getElementById('busToggle').addEventListener('click',function(){
   busOpen=!busOpen;
