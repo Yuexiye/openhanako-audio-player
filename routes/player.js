@@ -133,33 +133,17 @@ setTimeout(n,100);
   });
 
   // ── 播放队列 ──
-  const queuePath = path.join(dataDir, "queue.json");
-  const homeDir = process.env.USERPROFILE || process.env.HOME || "";
-  const prodQueuePath = homeDir ? path.join(homeDir, ".hanako", "plugin-data", "hanako-audio-player", "queue.json") : null;
-
+  // ── Media 库 API（替代旧的 queue.json） ──
   app.get("/widget/api/queue", (c) => {
     try {
-      if (fs.existsSync(queuePath)) {
-        return c.json(JSON.parse(fs.readFileSync(queuePath, "utf-8")));
-      }
-      if (prodQueuePath && fs.existsSync(prodQueuePath)) {
-        return c.json(JSON.parse(fs.readFileSync(prodQueuePath, "utf-8")));
-      }
-    } catch (e) { console.warn('[queue] GET failed:', e.message); }
-    return c.json([]);
+      const files = collectMediaFiles().map(({ name, size, mtime, url }) => ({ name, size, mtime, url }));
+      return c.json(files);
+    } catch (e) { return c.json([]); }
   });
 
   app.post("/widget/api/queue", async (c) => {
-    try {
-      const body = await c.req.json();
-      fs.writeFileSync(queuePath, JSON.stringify(body, null, 2), "utf-8");
-      if (prodQueuePath && prodQueuePath !== queuePath) {
-        try { fs.writeFileSync(prodQueuePath, JSON.stringify(body, null, 2), "utf-8"); } catch (e) { console.warn('[queue] prod sync write failed:', e.message); }
-      }
-      return c.json({ ok: true });
-    } catch (e) {
-      return c.json({ ok: false, error: e.message }, 500);
-    }
+    // 不再持久化播放列表——前端 trks 是纯内存的
+    return c.json({ ok: true });
   });
 
   // ── Speakers API ──
@@ -1561,10 +1545,18 @@ function busControl(action,extra){
       setTimeout(function(){busControl('next');}, 500);
     }
     // 如果 bus 返回了播放条目，推入播放器
-    if(res.event==='track_start' && res.item && res.item.url){
-      var url=res.item.url;
-      if(TOKEN) url=tok(url);
-      addTrack(res.item.name||'Bus', url, res.item.mode||'编排');
+    if(res.event==='track_start' && res.item){
+      // segue 类型：定时自动前进到下一首
+      if(res.item.type==='segue' || (!res.item.url && res.item.duration)){
+        var dur = res.item.duration || 3000;
+        setTimeout(function(){busControl('next');}, dur);
+      }
+      // play 类型：推入播放器播放
+      if(res.item.url){
+        var url=res.item.url;
+        if(TOKEN) url=tok(url);
+        addTrack(res.item.name||'Bus', url, res.item.mode||'编排');
+      }
     }
     return res;
   });
