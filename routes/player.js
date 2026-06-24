@@ -1,4 +1,4 @@
-﻿/**
+/**
  * hanako-audio-player/routes/player.js
  *
  * 播放器路由：

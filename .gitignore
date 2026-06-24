@@ -1,1 +1,6 @@
 node_modules/
+*.bak
+*.log
+bus-queue.json
+bus-state.json
+plugin-data/
