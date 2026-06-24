@@ -1360,12 +1360,13 @@ let trks = [], idx = 0, playing = false, playMode = 0, prevVol = 0.8;
 function saveTrks() { try { localStorage.setItem('hanako_audio_playlist', JSON.stringify(trks)); } catch(e) {} }
 function loadTrks() { try { var s = JSON.parse(localStorage.getItem('hanako_audio_playlist')); if(s && s.length) { trks = s; idx = 0; } } catch(e) {} }
 loadTrks();
-// 自动去重：空 url 条目按 name 去重，保留首次出现的
+// 自动去重：按裸 url（去掉 token）+ name 去重，保留首次出现的
 if(trks.length) {
   var _origLen=trks.length;
   var seen={};
   trks=trks.filter(function(t){
-    var key=(t.url||'')+'|'+(t.name||'');
+    var bareUrl=(t.url||'').split('?')[0];
+    var key=bareUrl+'|'+(t.name||'');
     if(seen[key]) return false;
     seen[key]=true; return true;
   });
@@ -1781,9 +1782,13 @@ audio.addEventListener('play',function(){playing=true;npCover.classList.add('spi
 audio.addEventListener('pause',function(){playing=false;npCover.classList.remove('spinning');document.getElementById('playIcon').style.display='block';document.getElementById('pauseIcon').style.display='none';});
 
 function addTrack(name,url,mode,group,lrcUrl) {
-  // 去重：url 非空时按 url 匹配，url 为空时按 name 匹配（歌单导入条目）
+  // 去重：url 非空时按裸 url（去掉 token）匹配，url 为空时按 name 匹配
+  var bareUrl = url ? url.split('?')[0] : '';
   for(let i=0;i<trks.length;i++){
-    if(url && trks[i].url===url){load(i);if(audio.paused){audio.play().catch(function(e){if(e.name!=="AbortError")console.warn(e)});}return;}
+    if(url){
+      var existBare=trks[i].url?trks[i].url.split('?')[0]:'';
+      if(existBare===bareUrl){load(i);if(audio.paused){audio.play().catch(function(e){if(e.name!=="AbortError")console.warn(e)});}return;}
+    }
     if(!url && trks[i].name===name && !trks[i].url){return;}
   }
   // 自动分组：未指定时按 mode 推断
@@ -2453,7 +2458,13 @@ loadScenes();
 
 // 加载队列
 fetch(API+'/widget/api/queue').then(function(r){return r.json();}).then(function(data){
-  if(data&&data.length){data.forEach(function(t){addTrack(t.name,tok(t.url),t.mode);});}
+  if(data&&data.length){data.forEach(function(t){
+    // 去重：按 url 去掉 token 后比较
+    var bareUrl=t.url||'';
+    var found=false;
+    for(var i=0;i<trks.length;i++){if(trks[i].url===tok(bareUrl)||trks[i].url===bareUrl){found=true;break;}}
+    if(!found) addTrack(t.name,tok(bareUrl),t.mode);
+  });}
 }).catch(function(){});
 
 // 定时检查新队列 + 验证已有曲目文件是否仍存在
@@ -2461,9 +2472,10 @@ setInterval(function(){
   // 检查新队列
   fetch(API+'/widget/api/queue').then(function(r){return r.json();}).then(function(data){
     if(data&&data.length){data.forEach(function(t){
+      var bareUrl=t.url||'';
       var found=false;
-      for(var i=0;i<trks.length;i++){if(trks[i].url===tok(t.url)){found=true;break;}}
-      if(!found) addTrack(t.name,tok(t.url),t.mode);
+      for(var i=0;i<trks.length;i++){if(trks[i].url===tok(bareUrl)||trks[i].url===bareUrl){found=true;break;}}
+      if(!found) addTrack(t.name,tok(bareUrl),t.mode);
     });}
   }).catch(function(){});
   // 验证本地文件是否仍存在（仅检查 /widget/media/ 开头的 URL）
