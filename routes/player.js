@@ -133,9 +133,10 @@ body{
   width:100%;max-width:480px;
   background:#FFFBF5;border:1px solid rgba(0,0,0,0.06);
   border-radius:10px;overflow:hidden;
+  margin:0 auto;
 }
 .top{height:2px;background:linear-gradient(90deg,#d49a6a,#c48454)}
-.body{padding:8px 12px}
+.body{padding:8px 14px}
 .row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
 .icon{
   width:26px;height:26px;border-radius:5px;
@@ -742,7 +743,7 @@ body {
 /* ── Controls ── */
 .controls {
   display:flex; align-items:center; justify-content:center;
-  padding:4px 14px 10px; gap:16px;
+  padding:4px 20px 10px; gap:18px; box-sizing:border-box; overflow:visible;
 }
 .ctrl-btn {
   background:none; border:none; color:var(--text-dim); cursor:pointer;
