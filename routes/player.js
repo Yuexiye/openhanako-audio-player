@@ -22,6 +22,46 @@ export default function (app, ctx) {
   const home = process.env.USERPROFILE || process.env.HOME || "";
   const pluginDataMediaDir = home ? path.join(home, ".hanako", "plugin-data", "hanako-audio-player", "media") : null;
 
+  // ── 扫描本地媒体文件 ──
+  function collectMediaFiles() {
+    const results = [];
+    const seen = new Set();
+    const exts = [".mp3", ".wav", ".ogg", ".flac", ".m4a"];
+    function scanDir(dir, urlPrefix) {
+      if (!dir || !fs.existsSync(dir)) return;
+      try {
+        for (const name of fs.readdirSync(dir)) {
+          const lower = name.toLowerCase();
+          if (!exts.some(e => lower.endsWith(e))) continue;
+          if (name.startsWith("_")) continue;
+          if (seen.has(name)) continue;
+          seen.add(name);
+          try {
+            const stat = fs.statSync(path.join(dir, name));
+            // 读取 _names.json 做美化
+            let displayName = name.replace(/\.\w+$/, "");
+            try {
+              const namesPath = path.join(dir, "_names.json");
+              if (fs.existsSync(namesPath)) {
+                const namesMap = JSON.parse(fs.readFileSync(namesPath, "utf-8"));
+                if (namesMap[name]) displayName = namesMap[name];
+              }
+            } catch (e) {}
+            results.push({
+              name: displayName,
+              url: `${urlPrefix}/${encodeURIComponent(name)}`,
+              size: stat.size,
+              mtime: stat.mtime.toISOString(),
+            });
+          } catch (e) {}
+        }
+      } catch (e) {}
+    }
+    scanDir(mediaDir, `/api/plugins/${pluginId}/widget/media`);
+    scanDir(pluginDataMediaDir, `/api/plugins/${pluginId}/widget/media`);
+    return results;
+  }
+
   // ── Widget 页面 ──
   app.get("/widget", (c) => {
     const hanaCss = c.req.query("hana-css") || "";
@@ -1486,20 +1526,37 @@ function renderPL() {
       body.classList.toggle('collapsed');
       el.classList.toggle('collapsed',body.classList.contains('collapsed'));
     });
-    // 双击组名可重命名
+    // 双击组名可重命名（内联输入框，不用 prompt）
     el.addEventListener('dblclick',function(e){
       e.preventDefault(); e.stopPropagation();
       var oldName=el.dataset.group;
-      var newName=prompt('重命名分组：', oldName);
-      if(!newName || newName===oldName) return;
-      // 更新该组下所有条目的 group
-      var items=el.nextElementSibling;
-      if(!items) return;
-      items.querySelectorAll('.pl-item').forEach(function(itemEl){
-        var i=parseInt(itemEl.dataset.i);
-        if(trks[i]) trks[i].group=newName;
-      });
-      saveTrks(); renderPL();
+      // 创建内联输入框
+      var inputWrap=document.createElement('div');
+      inputWrap.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;background:var(--bg-solid,#1e1e22);border:1px solid var(--accent,#d4a574);border-radius:10px;padding:20px;box-shadow:0 8px 32px rgba(0,0,0,0.5);min-width:300px';
+      inputWrap.innerHTML='<div style="color:var(--text,#eee);font-size:13px;margin-bottom:10px">重命名分组：</div>'
+        +'<input type="text" value="'+esc(oldName)+'" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:var(--surface,rgba(255,255,255,0.05));color:var(--text,#eee);font-size:14px;outline:none" />'
+        +'<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">'
+        +'<button class="rn-cancel" style="padding:6px 16px;border-radius:6px;border:none;background:rgba(255,255,255,0.08);color:var(--text,#eee);cursor:pointer;font-size:13px">取消</button>'
+        +'<button class="rn-ok" style="padding:6px 16px;border-radius:6px;border:none;background:var(--accent,#d4a574);color:#1a1a1e;cursor:pointer;font-size:13px;font-weight:600">确定</button>'
+        +'</div>';
+      document.body.appendChild(inputWrap);
+      var inp=inputWrap.querySelector('input');
+      inp.focus(); inp.select();
+      function close(){ inputWrap.remove(); }
+      function commit(){
+        var newName=inp.value.trim();
+        if(!newName||newName===oldName){ close(); return; }
+        var items=el.nextElementSibling;
+        if(items){ items.querySelectorAll('.pl-item').forEach(function(itemEl){
+          var i=parseInt(itemEl.dataset.i);
+          if(trks[i]) trks[i].group=newName;
+        });}
+        saveTrks(); renderPL();
+        close();
+      }
+      inputWrap.querySelector('.rn-ok').addEventListener('click',commit);
+      inputWrap.querySelector('.rn-cancel').addEventListener('click',close);
+      inp.addEventListener('keydown',function(ev){ if(ev.key==='Enter') commit(); if(ev.key==='Escape') close(); });
     });
   });
   // 条目右键菜单：移动到其他分组
@@ -1522,7 +1579,33 @@ function renderPL() {
       menu.addEventListener('click',function(ev){
         var opt=ev.target.closest('[data-g]'); if(!opt) return;
         var g=opt.dataset.g;
-        if(g==='__new__') { g=prompt('新分组名：'); if(!g) { menu.remove(); return; } }
+        if(g==='__new__'){
+          menu.remove();
+          // 内联输入框替代 prompt
+          var inputWrap=document.createElement('div');
+          inputWrap.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;background:var(--bg-solid,#1e1e22);border:1px solid var(--accent,#d4a574);border-radius:10px;padding:20px;box-shadow:0 8px 32px rgba(0,0,0,0.5);min-width:300px';
+          inputWrap.innerHTML='<div style="color:var(--text,#eee);font-size:13px;margin-bottom:10px">新分组名：</div>'
+            +'<input type="text" placeholder="输入分组名称" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:var(--surface,rgba(255,255,255,0.05));color:var(--text,#eee);font-size:14px;outline:none" />'
+            +'<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">'
+            +'<button class="ng-cancel" style="padding:6px 16px;border-radius:6px;border:none;background:rgba(255,255,255,0.08);color:var(--text,#eee);cursor:pointer;font-size:13px">取消</button>'
+            +'<button class="ng-ok" style="padding:6px 16px;border-radius:6px;border:none;background:var(--accent,#d4a574);color:#1a1a1e;cursor:pointer;font-size:13px;font-weight:600">确定</button>'
+            +'</div>';
+          document.body.appendChild(inputWrap);
+          var inp=inputWrap.querySelector('input');
+          inp.focus();
+          function close2(){ inputWrap.remove(); }
+          function commit2(){
+            var newG=inp.value.trim();
+            if(!newG){ close2(); return; }
+            trks[i].group=newG;
+            saveTrks(); renderPL();
+            close2();
+          }
+          inputWrap.querySelector('.ng-ok').addEventListener('click',commit2);
+          inputWrap.querySelector('.ng-cancel').addEventListener('click',close2);
+          inp.addEventListener('keydown',function(ev){ if(ev.key==='Enter') commit2(); if(ev.key==='Escape') close2(); });
+          return;
+        }
         trks[i].group=g;
         saveTrks(); renderPL();
         menu.remove();
