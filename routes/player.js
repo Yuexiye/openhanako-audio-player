@@ -1697,6 +1697,8 @@ function addTrack(name,url,mode,group,lrcUrl) {
     else if(url && url.includes('ilovemusic')) group='电台流';
     else group='在线音乐';
   }
+  // 存 lrc 映射
+  if(lrcUrl && url) lrcMap[url]=lrcUrl;
   trks.push({name:name||url.split('/').pop().split('\\\\').pop().split('?')[0]||'音频',url:url,mode:mode||(url.startsWith('http')?'在线':'本地'),dur:0,group:group,lrcUrl:lrcUrl||''});
   load(trks.length-1);
   if(audio.paused){audio.play().catch(function(e){if(e.name!=="AbortError")console.warn(e)});}
@@ -1820,7 +1822,7 @@ function doMusicSearch(){
   fetch(API+'/widget/api/music/search?keyword='+encodeURIComponent(kw)+'&server='+sv).then(function(r){return r.json();}).then(function(res){
     if(!res.ok||!res.results||!res.results.length){ el.innerHTML='<div class="music-empty">没有结果</div>'; return; }
     el.innerHTML=res.results.map(function(t){
-      return '<div class="music-item" data-title="'+esc(t.title)+'" data-url="'+esc(t.url)+'" data-lrc="'+esc(t.lrc||'')+">'
+      return '<div class="music-item" data-title="'+esc(t.title)+'" data-url="'+esc(t.url)+'">'
         +(t.pic ? '<img class="music-thumb" src="'+esc(t.pic)+'" loading="lazy">' : '<div class="music-thumb-placeholder">♫</div>')
         +'<div class="music-info"><div class="music-title">'+esc(t.title)+'</div><div class="music-author">'+esc(t.author)+'</div></div>'
         +'<button class="music-play" title="播放">▶</button>'
@@ -2112,7 +2114,7 @@ function doPlaylistImport(){
       var t=trks[idx];
       if(!t||!t.url) return;
       // 尝试从 Meting URL 提取 id
-      var lrcUrl=t.lrcUrl||'';
+      var lrcUrl=t.lrcUrl||lrcMap[t.url]||'';
       var svM=t.url.match(/server=(netease|tencent)/);
       if(!idM) return;
       var songId=idM[1];
@@ -2127,6 +2129,7 @@ function doPlaylistImport(){
   },800);
 })();
 
+var lrcMap = {};
 var busOpen=false;
 document.getElementById('busToggle').addEventListener('click',function(){
   busOpen=!busOpen;
