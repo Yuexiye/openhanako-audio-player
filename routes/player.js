@@ -1214,8 +1214,8 @@ body {
 
 <!-- Controls -->
 <div class="controls">
-  <button class="ctrl-btn" id="prevBtn" title="上一首">
-    <svg viewBox="0 0 24 24" style="fill:currentColor;stroke:none"><polygon points="19 20 9 12 19 4 19 20"/><rect x="4" y="4" width="2" height="16" rx="1"/></svg>
+  <button class="ctrl-btn" id="prevBtn" title="上一首" style="opacity:1;width:34px;height:34px;">
+    <svg viewBox="0 0 24 24" style="fill:currentColor;stroke:none;width:20px;height:20px;"><polygon points="19 20 9 12 19 4 19 20"/><rect x="4" y="4" width="3" height="16" rx="1"/></svg>
   </button>
   <button class="ctrl-play" id="playBtn" title="播放/暂停">
     <svg id="playIcon" viewBox="0 0 24 24"><polygon points="8,5 19,12 8,19" fill="white" stroke="none"/></svg>
@@ -2321,7 +2321,8 @@ function busControl(action,extra){
       if(res.item.url){
         var url=res.item.url;
         if(TOKEN) url=tok(url);
-        addTrack(res.item.name||'Bus', url, res.item.mode||'编排');
+        // Bus 独立播放：不再加入主播放列表，只在 Bus 面板显示状态
+        showToast('编排播放: '+res.item.name, 1500);
       }
     }
     return res;
