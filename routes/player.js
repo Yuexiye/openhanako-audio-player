@@ -1153,7 +1153,7 @@ body {
 
 <!-- Controls -->
 <div class="controls">
-  <button class="ctrl-btn" id="prevBtn" title="上一首">
+  <button class="ctrl-btn" id="prevBtn" title="上一首" style="opacity:0.8">
     <svg viewBox="0 0 24 24"><polygon points="19 20 9 12 19 4 19 20" fill="currentColor" stroke="none"/><line x1="5" y1="19" x2="5" y2="5"/></svg>
   </button>
   <button class="ctrl-play" id="playBtn" title="播放/暂停">
@@ -2113,16 +2113,12 @@ function doPlaylistImport(){
       _lastTrack=name;
       var t=trks[idx];
       if(!t||!t.url) return;
-      // 尝试从 Meting URL 提取 id
+      // 从 lrcMap 或 track 数据获取歌词 URL
       var lrcUrl=t.lrcUrl||lrcMap[t.url]||'';
-      var svM=t.url.match(/server=(netease|tencent)/);
-      if(!idM) return;
-      var songId=idM[1];
-      var sv=svM?svM[1]:'netease';
+      if(!lrcUrl) return;
       fetch(lrcUrl).then(function(r){return r.text();}).then(function(raw){
         if(!raw||raw.length<10) return;
         lrcData=parseLrc(raw);
-        currentLrcId=songId;
         renderLrc();
       }).catch(function(){});
     }
