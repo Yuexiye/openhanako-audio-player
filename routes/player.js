@@ -1480,6 +1480,7 @@ body {
 
 const API = ${JSON.stringify(apiBase)};
 const TOKEN = ${JSON.stringify(token)};
+const HAS_NETEASE_COOKIE = ${JSON.stringify(NETEASE_COOKIE ? true : false)};
 const HAS_TENCENT_COOKIE = ${JSON.stringify(TENCENT_COOKIE ? true : false)};
 if (TOKEN) {
   const _f = window.fetch.bind(window);
