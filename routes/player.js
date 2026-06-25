@@ -1504,7 +1504,7 @@ function saveTrks() { try { localStorage.setItem('hanako_audio_playlist', JSON.s
 function loadTrks() { try { var s = JSON.parse(localStorage.getItem('hanako_audio_playlist')); if(s && s.length) { trks = s; idx = 0; trks.forEach(function(t){ if(t.url) t.url = t.url.split('?token=')[0].split('&token=')[0]; }); } } catch(e) {} }
 loadTrks();
 // 缓存版本——旧 Meting URL 自动刷新
-var CACHE_VERSION = 3;
+var CACHE_VERSION = 4;
 var _savedV = parseInt(localStorage.getItem('hanako_audio_cache_v')||'0');
 if (_savedV < CACHE_VERSION && trks.length) {
   trks.forEach(function(t){
