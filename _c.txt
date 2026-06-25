@@ -1,0 +1,5 @@
+feat: cookie 读取改为 cookies.env 文件（不入库）
+
+- 新增 cookies.env 文件，.gitignore 已排除
+- 代码优先读 cookies.env，回退到环境变量
+- 网易云 + QQ音乐 cookie 都走这个机制

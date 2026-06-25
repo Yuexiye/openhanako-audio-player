@@ -14,10 +14,32 @@ import { getBus } from "../tools/bus.js";
 
 const MIME = { mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", flac: "audio/flac", m4a: "audio/mp4" };
 
-// 环境变量：网易云 cookie（格式：MUSIC_U=xxxxxxxx），用于获取完整音频
-const NETEASE_COOKIE = process.env.NETEASE_COOKIE || "";
-// 环境变量：QQ音乐 cookie（格式：uin=xxx; qqmusic_key=xxx），用于获取完整音频
-const TENCENT_COOKIE = process.env.TENCENT_COOKIE || "";
+// ── 网易云 cookie（用于获取完整音频，绕过试听限制）──
+// 读取顺序：cookies.env 文件 > 环境变量 NETEASE_COOKIE
+// 获取方式：浏览器登录 https://music.163.com → F12 → Network → 任意请求 → Cookie 头
+// 格式：MUSIC_U=xxx; __csrf=xxx
+// 有效期通常数周到数月，过期后重新获取
+function _loadCookies() {
+  try {
+    const envPath = path.join(__dirname, '..', 'cookies.env');
+    if (fs.existsSync(envPath)) {
+      const lines = fs.readFileSync(envPath, 'utf-8').split('\n');
+      const map = {};
+      for (const line of lines) {
+        const m = line.match(/^([A-Z_]+)=(.*)$/);
+        if (m) map[m[1]] = m[2];
+      }
+      return map;
+    }
+  } catch (e) {}
+  return {};
+}
+const _cookieMap = _loadCookies();
+const NETEASE_COOKIE = _cookieMap.NETEASE_COOKIE || process.env.NETEASE_COOKIE || "";
+// ── QQ音乐 cookie ──
+// 获取方式：浏览器登录 https://y.qq.com → F12 → Network → 任意请求 → Cookie 头
+// 格式：uin=xxx; qqmusic_key=xxx
+const TENCENT_COOKIE = _cookieMap.TENCENT_COOKIE || process.env.TENCENT_COOKIE || "";
 
 export default function (app, ctx) {
   const pluginId = ctx.pluginId;
