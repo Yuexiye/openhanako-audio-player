@@ -1574,6 +1574,10 @@ function load(i) {
     return;
   }
   idx=i; const t=trks[i];
+  // 清空音频元素，防止旧 URL（如过期的 music.126.net）触发 NotSupportedError
+  audio.pause();
+  audio.removeAttribute('src');
+  audio.load();
   console.log("[player] load:", i, "name:", t.name, "url:", t.url ? t.url.slice(0,60) : "EMPTY", "searchKey:", t.searchKey || "none", "mode:", t.mode);
   document.getElementById('trackName').textContent=t.name;
   document.getElementById('trackMode').textContent=t.mode||'';
