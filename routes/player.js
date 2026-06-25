@@ -2020,8 +2020,10 @@ document.getElementById('plToggle').addEventListener('click',function(){
 document.getElementById('addBtn').addEventListener('click',function(){
   const v=document.getElementById('urlInput').value.trim();
   if(!v)return;
-  addTrack(null,v);
   document.getElementById('urlInput').value='';
+  showGroupPicker(function(groupName){
+    addTrack(null,v,'本地',groupName);
+  });
 });
 document.getElementById('urlInput').addEventListener('keydown',function(e){
   if(e.key==='Enter')document.getElementById('addBtn').click();
