@@ -1480,7 +1480,6 @@ body {
 
 const API = ${JSON.stringify(apiBase)};
 const TOKEN = ${JSON.stringify(token)};
-const HAS_NETEASE_COOKIE = ${JSON.stringify(NETEASE_COOKIE ? true : false)}; console.log("[player] HAS_NETEASE_COOKIE:", HAS_NETEASE_COOKIE, "cookie len:", ${NETEASE_COOKIE.length});
 const HAS_TENCENT_COOKIE = ${JSON.stringify(TENCENT_COOKIE ? true : false)};
 if (TOKEN) {
   const _f = window.fetch.bind(window);
@@ -1578,7 +1577,6 @@ function load(i) {
   audio.pause();
   audio.removeAttribute('src');
   audio.load();
-  console.log("[player] load:", i, "name:", t.name, "url:", t.url ? t.url.slice(0,60) : "EMPTY", "searchKey:", t.searchKey || "none", "mode:", t.mode);
   document.getElementById('trackName').textContent=t.name;
   document.getElementById('trackMode').textContent=t.mode||'';
 
@@ -1606,7 +1604,6 @@ function load(i) {
     var _isExpired = t.url.indexOf('music.126.net') !== -1 || t.url.indexOf('music.127.net') !== -1;
     var _needsUpgrade = (_isMeting && _idM && _hasCookie) || (_isExpired && t.searchKey);
     
-    console.log("[player] needsUpgrade:", _needsUpgrade, "_isMeting:", _isMeting, "_isExpired:", _isExpired, "_hasCookie:", _hasCookie);
     if (_needsUpgrade) {
       // 需要获取完整音频 → 先拿再播
       showToast('获取完整音频…', 1500);
@@ -1654,14 +1651,11 @@ function load(i) {
       }
     } else {
       // 非 Meting URL 或无 cookie → 直接播放
-      console.log('[player] direct play:', t.url);
       audio.src = tok(t.url); audio.load();
-      audio.play().catch(function(e){console.warn('[player] play error:', e.name, e.message, t.url);});
       _ensureLrc();
     }
   }
   else if(t.searchKey) {
-    console.log("[player] searchKey branch:", t.searchKey);
     // 无 URL 但有搜索关键词 → 搜索 + 获取完整音频
     showToast('搜索 '+t.name+'…', 1500);
     var sv = t.searchServer || 'netease';
