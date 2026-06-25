@@ -77,9 +77,8 @@ cp -r hanako-audio-player ~/.hanako/plugins/hanako-audio-player
 |------|------|--------|
 | `METING_API_URL` | Meting 实例地址 | `https://api.i-meto.com/meting/api` |
 | `METING_TOKEN` | Meting HMAC 鉴权密钥 | `token` |
-| `NETEASE_COOKIE` | 网易云 cookie（获取完整音频，绕过试听限制） | 空（使用匿名试听） |
-| `TENCENT_COOKIE` | QQ音乐 cookie（格式：uin=xxx; qqmusic_key=xxx） | 空 |
-| `COSYVOICE_BASE` | CosyVoice 项目路径 | 自动搜索 |
+
+> Cookie 配置请使用 `cookies.env` 文件（见下方「获取完整音频」章节），不再推荐环境变量方式。
 
 ## 文件结构
 
@@ -116,36 +115,50 @@ hanako-audio-player/
 
 ## 获取完整音频（绕过 30 秒试听）
 
-默认使用公共 Meting 实例，未登录状态下平台只返回 30 秒试听片段。配置网易云 cookie 后可获取完整音频。
+默认使用公共 Meting 实例，未登录状态下平台只返回 30 秒试听片段。配置 cookie 后可获取完整音频。
 
 ### 配置步骤
+
+在插件根目录创建 `cookies.env` 文件（参考 `cookies.env.example`）：
+
+```env
+NETEASE_COOKIE=MUSIC_U=你的值; __csrf=你的值
+TENCENT_COOKIE=uin=你的uin; qqmusic_key=你的key
+```
+
+> ⚠️ `cookies.env` 已在 `.gitignore` 中排除，不会被提交到仓库。
 
 #### 网易云
 
 1. 浏览器登录 [网易云网页版](https://music.163.com)
-2. 打开开发者工具（F12）→ Network → 随便点一个请求 → 复制 Cookie 头
-3. 提取 `MUSIC_U` 的值
-4. 设置环境变量：
+2. 打开开发者工具（F12）→ Application → Cookies → `https://music.163.com`
+3. 找到 `MUSIC_U` 和 `__csrf` 两个字段
+4. 按格式写入 `cookies.env`：
 
-```bash
-set NETEASE_COOKIE=MUSIC_U=你的值
+```env
+NETEASE_COOKIE=MUSIC_U=00B83B...; __csrf=371f81...
 ```
 
 #### QQ音乐
 
 1. 浏览器登录 [QQ音乐网页版](https://y.qq.com)
-2. 打开开发者工具（F12）→ Network → 随便点一个请求 → 复制 Cookie 头
-3. 提取 `uin` 和 `qqmusic_key` 两个字段
-4. 设置环境变量：
+2. 打开开发者工具（F12）→ Application → Cookies → `https://y.qq.com`
+3. 找到 `uin` 和 `qqmusic_key` 两个字段
+4. 按格式写入 `cookies.env`：
 
-```bash
-set TENCENT_COOKIE=uin=你的uin; qqmusic_key=你的key
+```env
+TENCENT_COOKIE=uin=12345678; qqmusic_key=abcdef123456
 ```
 
 5. 重启 Hanako
 
 > Cookie 有效期通常数周到数月，过期后重新获取即可。
 > 未配置 cookie 时自动回退到 Meting 试听 URL，不影响基本功能。
+> 也支持通过环境变量 `NETEASE_COOKIE` / `TENCENT_COOKIE` 配置（`cookies.env` 优先）。
+
+### 其他平台
+
+酷狗、百度、酷我通过 Meting 搜索，暂不支持 cookie 升级完整音频，使用 30 秒试听。
 
 ## 许可
 
