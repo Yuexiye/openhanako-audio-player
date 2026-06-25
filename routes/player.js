@@ -2169,7 +2169,6 @@ document.getElementById('musicResults').addEventListener('click', function(e){
       if (d.ok && d.url) { cb(d.url); } else { cb(metingUrl); }
     }).catch(function(){ cb(metingUrl); });
   }
-  }
   function withUrl(cb) {
     if (url) { tryFullUrl(url, cb); return; }
     if (!searchKey) { showToast('无法获取音频', 2000); return; }
