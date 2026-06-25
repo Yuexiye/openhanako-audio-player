@@ -309,7 +309,7 @@ setTimeout(n,100);
     if (!id) return c.json({ ok:false, error:"id required" }, 400);
 
     // 没配任何 cookie → 直接回退到 Meting URL
-    if (!NETEASE_COOKIE && !TENCENT_COOKIE && fallback) return c.redirect(fallback);
+    if (!NETEASE_COOKIE && !TENCENT_COOKIE && fallback) return c.json({ ok:true, url:fallback, fallback:true });
     if (!NETEASE_COOKIE && !TENCENT_COOKIE) return c.json({ ok:false, error:"no cookie configured" }, 503);
 
     try {
@@ -1500,6 +1500,8 @@ if(trks.length) {
   });
   if(trks.length!==_origLen) { saveTrks(); renderPL(); showToast('已清理 '+_origLen+' → '+trks.length+' 条重复',2000); }
 }
+renderPL();
+renderPL();
 // 为旧数据补 group 字段
 if(trks.length) {
   var needsGroup=false;
@@ -1563,9 +1565,8 @@ function load(i) {
         if (hasCookie && idMatch) {
           var songId=idMatch[1], sv2=svMatch?svMatch[1]:'netease';
           var fullApi=API+'/widget/api/music/full-url?id='+encodeURIComponent(songId)+'&server='+sv2+'&fallback='+encodeURIComponent(_metaUrl);
-          fetch(fullApi,{redirect:'manual'}).then(function(r){
-            if((r.status===302||r.status===301)){var loc=r.headers.get('location');if(loc&&!loc.includes('/404')){t.url=loc;audio.src=t.url;audio.load();audio.play().catch(function(e){if(e.name!=='AbortError')console.warn(e)});return;}}
-            t.url=_metaUrl;audio.src=t.url;audio.load();audio.play().catch(function(e){if(e.name!=='AbortError')console.warn(e)});
+          fetch(fullApi).then(function(r){return r.json();}).then(function(d){
+            t.url=(d.ok&&d.url)?d.url:_metaUrl;audio.src=t.url;audio.load();audio.play().catch(function(e){if(e.name!=='AbortError')console.warn(e)});
           }).catch(function(){t.url=_metaUrl;audio.src=t.url;audio.load();audio.play().catch(function(e){if(e.name!=='AbortError')console.warn(e)});});
         } else {
           t.url=_metaUrl;audio.src=t.url;audio.load();audio.play().catch(function(e){if(e.name!=='AbortError')console.warn(e)});
@@ -2164,13 +2165,10 @@ document.getElementById('musicResults').addEventListener('click', function(e){
     var hasCookie = (sv === 'netease' && HAS_NETEASE_COOKIE) || (sv === 'tencent' && HAS_TENCENT_COOKIE);
     if (!hasCookie) { cb(metingUrl); return; }
     var fullUrlApi = API+'/widget/api/music/full-url?id='+encodeURIComponent(songId)+'&server='+sv+'&fallback='+encodeURIComponent(metingUrl);
-    fetch(fullUrlApi, {method:'HEAD', redirect:'manual'}).then(function(r){
-      if (r.status === 302 || r.status === 301) {
-        var loc = r.headers.get('location');
-        if (loc && !loc.includes('/404')) { cb(loc); return; }
-      }
-      cb(metingUrl);
+    fetch(fullUrlApi).then(function(r){return r.json();}).then(function(d){
+      if (d.ok && d.url) { cb(d.url); } else { cb(metingUrl); }
     }).catch(function(){ cb(metingUrl); });
+  }
   }
   function withUrl(cb) {
     if (url) { tryFullUrl(url, cb); return; }
