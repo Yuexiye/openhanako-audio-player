@@ -188,15 +188,6 @@ def process_task(task_id):
     ref_text = task.get('refText', '')
     instruct = task.get('instruct', '')
 
-    # ── 说话人参考音频查找 ──
-    # 优先级：用户显式传入 > speaker_refs.json 配置 > SFT 内置说话人
-    if not ref_audio or not ref_text or not os.path.exists(ref_audio):
-        spk_ref = get_speaker_ref(spk)
-        if spk_ref:
-            ref_audio = spk_ref.get('ref_audio', '')
-            ref_text = spk_ref.get('ref_text', '')
-            print(f'[speaker_refs] 使用 {spk} 的参考音频: {ref_audio}', file=sys.stderr)
-
     # ── 自动转录 ──
     if ref_audio and not ref_text and os.path.exists(ref_audio):
         print(f'[转录] 参考音频无文本，自动 Whisper 转录: {ref_audio}', file=sys.stderr)
