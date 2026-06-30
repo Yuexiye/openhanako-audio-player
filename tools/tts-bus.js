@@ -38,7 +38,7 @@ const parameters = {
 // ── 辅助函数（复用 tts.js 逻辑）──
 
 function findVenvPython(cosyVoiceBase) {
-  if (!cosyVoiceBase) cosyVoiceBase = 'W:/Games/Hanako/Work/projects/cosyvoice-tts';
+  if (!cosyVoiceBase) return 'python';
   cosyVoiceBase = String(cosyVoiceBase).replace(/^["']|["']$/g, '');
   const candidates = [
     path.join(cosyVoiceBase, 'venv', 'Scripts', 'python.exe'),

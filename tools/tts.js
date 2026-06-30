@@ -24,7 +24,7 @@ const parameters = {
 
 /** 查找 venv Python 解释器 */
 function findVenvPython(cosyVoiceBase) {
-  if (!cosyVoiceBase) cosyVoiceBase = 'W:/Games/Hanako/Work/projects/cosyvoice-tts';
+  if (!cosyVoiceBase) return 'python';
   // 去除环境变量可能带的引号
   cosyVoiceBase = String(cosyVoiceBase).replace(/^["']|["']$/g, '');
   const candidates = [
