@@ -7,25 +7,25 @@ import { randomUUID } from 'node:crypto';
 const execFile = promisify(execFileCb);
 
 const name = 'tts';
-const description = '用 CosyVoice 本地模型合成语音（零样本克隆/情感控制），自动播放并加入播放列表';
+const description = '鐢?CosyVoice 鏈湴妯″瀷鍚堟垚璇煶锛堥浂鏍锋湰鍏嬮殕/鎯呮劅鎺у埗锛夛紝鑷姩鎾斁骞跺姞鍏ユ挱鏀惧垪琛?;
 
 const parameters = {
   type: 'object',
   properties: {
-    text: { type: 'string', description: '要合成的文本（最大 500 字符）', maxLength: 500 },
-    spk: { type: 'string', description: '说话人ID（需先克隆）', default: 'my_voice' },
-    refAudio: { type: 'string', description: '参考音频路径（零样本克隆时必填）' },
-    refText: { type: 'string', description: '参考文本（零样本克隆时必填）' },
-    instruct: { type: 'string', description: '情感指令：开心/温柔/低沉/激动 等' },
-    translate: { type: 'string', description: '中文翻译（当text为非中文时提供，会显示在合成结果下方）' },
+    text: { type: 'string', description: '瑕佸悎鎴愮殑鏂囨湰锛堟渶澶?500 瀛楃锛?, maxLength: 500 },
+    spk: { type: 'string', description: '璇磋瘽浜篒D锛堥渶鍏堝厠闅嗭級', default: 'my_voice' },
+    refAudio: { type: 'string', description: '鍙傝€冮煶棰戣矾寰勶紙闆舵牱鏈厠闅嗘椂蹇呭～锛? },
+    refText: { type: 'string', description: '鍙傝€冩枃鏈紙闆舵牱鏈厠闅嗘椂蹇呭～锛? },
+    instruct: { type: 'string', description: '鎯呮劅鎸囦护锛氬紑蹇?娓╂煍/浣庢矇/婵€鍔?绛? },
+    translate: { type: 'string', description: '涓枃缈昏瘧锛堝綋text涓洪潪涓枃鏃舵彁渚涳紝浼氭樉绀哄湪鍚堟垚缁撴灉涓嬫柟锛? },
   },
   required: ['text'],
 };
 
-/** 查找 venv Python 解释器 */
+/** 鏌ユ壘 venv Python 瑙ｉ噴鍣?*/
 function findVenvPython(cosyVoiceBase) {
   if (!cosyVoiceBase) cosyVoiceBase = 'W:/Games/Hanako/Work/projects/cosyvoice-tts';
-  // 去除环境变量可能带的引号
+  // 鍘婚櫎鐜鍙橀噺鍙兘甯︾殑寮曞彿
   cosyVoiceBase = String(cosyVoiceBase).replace(/^["']|["']$/g, '');
   const candidates = [
     path.join(cosyVoiceBase, 'venv', 'Scripts', 'python.exe'),
@@ -39,7 +39,7 @@ function findVenvPython(cosyVoiceBase) {
   return 'python';
 }
 
-/** 查找 executor.py */
+/** 鏌ユ壘 executor.py */
 function findExecutor(pluginId) {
   const home = process.env.USERPROFILE || process.env.HOME || '';
   const candidates = [
@@ -55,17 +55,17 @@ function findExecutor(pluginId) {
   }
   const fallback = path.join(home, '.hanako', 'plugins', pluginId, 'executor.py');
   if (fs.existsSync(fallback)) return fallback;
-  throw new Error(`executor.py 未找到，已扫描路径：\n  ${candidates.concat(fallback).join('\n  ')}`);
+  throw new Error(`executor.py 鏈壘鍒帮紝宸叉壂鎻忚矾寰勶細\n  ${candidates.concat(fallback).join('\n  ')}`);
 }
 
-/** 检测文本是否包含非中文（如日文）字符 */
+/** 妫€娴嬫枃鏈槸鍚﹀寘鍚潪涓枃锛堝鏃ユ枃锛夊瓧绗?*/
 function hasNonChinese(text) {
   return /[\u3040-\u30ff\uac00-\ud7af\u4e00-\u9fff]/.test(text) && !/^[\u4e00-\u9fff\uff00-\uffef\u3000-\u303f\s\w]+$/.test(text);
 }
 
 async function execute(input, { sessionPath, pluginId, dataDir }) {
   const text = input.text;
-  const trackName = text.length > 20 ? text.slice(0, 20) + '…' : text;
+  const trackName = text.length > 20 ? text.slice(0, 20) + '鈥? : text;
   const translation = input.translate || '';
 
   const taskDir = path.join(dataDir, 'tasks');
@@ -98,20 +98,19 @@ async function execute(input, { sessionPath, pluginId, dataDir }) {
     });
   } catch (e) {
     return {
-      content: [{ type: 'text', text: `❌ TTS 合成失败：${e.message}` }],
+      content: [{ type: 'text', text: `鉂?TTS 鍚堟垚澶辫触锛?{e.message}` }],
     };
   }
 
-  // 验证输出文件
+  // 楠岃瘉杈撳嚭鏂囦欢
   const outputFile = path.join(dataDir, 'media', `${taskId}.wav`);
   if (!fs.existsSync(outputFile)) {
     return {
-      content: [{ type: 'text', text: `❌ TTS 合成失败：执行器已退出但未找到输出文件\n  taskId=${taskId}\n  wav=${outputFile}` }],
+      content: [{ type: 'text', text: `鉂?TTS 鍚堟垚澶辫触锛氭墽琛屽櫒宸查€€鍑轰絾鏈壘鍒拌緭鍑烘枃浠禱n  taskId=${taskId}\n  wav=${outputFile}` }],
     };
   }
 
-  // 写入 _names.json 映射（文件名 → 完整文本）
-  const namesPath = path.join(dataDir, 'media', '_names.json');
+  // 鍐欏叆 _names.json 鏄犲皠锛堟枃浠跺悕 鈫?瀹屾暣鏂囨湰锛?  const namesPath = path.join(dataDir, 'media', '_names.json');
   try {
     const namesMap = fs.existsSync(namesPath) ? JSON.parse(fs.readFileSync(namesPath, 'utf-8')) : {};
     namesMap[`${taskId}.wav`] = text;
@@ -120,7 +119,7 @@ async function execute(input, { sessionPath, pluginId, dataDir }) {
     fs.renameSync(tmpNames, namesPath);
   } catch (e) { console.warn('[tts] _names.json write failed:', e.message); }
 
-  // 加入播放队列
+  // 鍔犲叆鎾斁闃熷垪
   const fileName = `${taskId}.wav`;
   const mediaUrl = `/api/plugins/${pluginId}/widget/media/${encodeURIComponent(fileName)}`;
   const queuePath = path.join(dataDir, 'queue.json');
@@ -132,7 +131,7 @@ async function execute(input, { sessionPath, pluginId, dataDir }) {
     }
   } catch (e) { console.warn('[tts] queue read failed:', e.message); }
   if (!queue.some(t => t.url === mediaUrl)) {
-    queue.push({ name: trackName, url: mediaUrl, mode: '本地' });
+    queue.push({ name: trackName, url: mediaUrl, mode: '鏈湴' });
     try {
       const tmpPath = queuePath + '.tmp.' + process.pid;
       fs.writeFileSync(tmpPath, JSON.stringify(queue, null, 2), 'utf-8');
@@ -140,20 +139,17 @@ async function execute(input, { sessionPath, pluginId, dataDir }) {
     } catch (e) { console.warn('[tts] queue write failed:', e.message); }
   }
 
-  // 构建回复文本
+  // 鏋勫缓鍥炲鏂囨湰
   const hasNonChineseText = hasNonChinese(text);
-  let replyText = `🎤 CosyVoice 合成「${trackName}」`;
+  let replyText = `馃帳 CosyVoice 鍚堟垚銆?{trackName}銆峘;
   
-  // 如果是非中文语言且提供了翻译，附加翻译
-  if (hasNonChineseText && translation) {
-    replyText += `\n📖 ${translation}`;
+  // 濡傛灉鏄潪涓枃璇█涓旀彁渚涗簡缈昏瘧锛岄檮鍔犵炕璇?  if (hasNonChineseText && translation) {
+    replyText += `\n馃摉 ${translation}`;
   } else if (hasNonChineseText && !translation) {
-    // 非中文但没给翻译，提示一下
-    replyText += `\n💡 检测到非中文文本，可使用 translate="..." 参数添加翻译`;
+    // 闈炰腑鏂囦絾娌＄粰缈昏瘧锛屾彁绀轰竴涓?    replyText += `\n馃挕 妫€娴嬪埌闈炰腑鏂囨枃鏈紝鍙娇鐢?translate="..." 鍙傛暟娣诲姞缈昏瘧`;
   }
 
-  // 对话内嵌卡片（使用 widget 路由绕过 /play 鉴权问题）
-  const cardRoute = input.translate ? `/widget?action=play_file&file=${encodeURIComponent(fileName)}&translate=${encodeURIComponent(input.translate)}` : `/widget?action=play_file&file=${encodeURIComponent(fileName)}`;
+  // 瀵硅瘽鍐呭祵鍗＄墖锛堜娇鐢?widget 璺敱缁曡繃 /play 閴存潈闂锛?  const cardRoute = input.translate ? `/widget?action=play_file&file=${encodeURIComponent(fileName)}&translate=${encodeURIComponent(input.translate)}` : `/widget?action=play_file&file=${encodeURIComponent(fileName)}`;
 
   return {
     content: [{ type: 'text', text: replyText }],
